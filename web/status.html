@@ -89,6 +89,20 @@
     .notice .icon { font-size: 34px; display: block; margin-bottom: 6px; }
     footer { color: var(--muted); font-size: 12px; text-align: center; padding: 18px 16px 28px; max-width: 760px; margin: 0 auto; }
     [hidden] { display: none !important; }
+    .pay { margin-top: 22px; }
+    .pay h2 { font-size: 17px; margin: 0 0 4px; }
+    .pay p { color: var(--muted); margin: 0 0 12px; font-size: 14px; }
+    .qrs { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+    .qr {
+      background: #fff; border: 1px solid var(--border); border-radius: 14px;
+      padding: 10px; display: flex; flex-direction: column; align-items: center; gap: 8px;
+    }
+    .qr img { width: 100%; max-width: 260px; height: auto; display: block; }
+    .qr .name { font-weight: 800; color: #15223b; }
+    .qr a.save {
+      font-size: 13px; font-weight: 700; color: #1463f3; text-decoration: none;
+      border: 1px solid #c8d4e3; border-radius: 999px; padding: 7px 14px; min-height: 36px;
+    }
     .skeleton { height: 78px; border-radius: 14px; background: var(--card); border: 1px solid var(--border); opacity: .6; }
   </style>
 </head>
@@ -126,6 +140,34 @@
       </div>
       <div id="schedule" class="list" role="tabpanel" aria-labelledby="tab-schedule"></div>
       <div id="history" class="list" role="tabpanel" aria-labelledby="tab-history" hidden></div>
+
+      <section class="pay" aria-labelledby="pay-title">
+        <h2 id="pay-title">How to pay</h2>
+        <p id="pay-help">
+          Pay with any banking or e-wallet app that supports InstaPay. On this phone,
+          tap <b>Save image</b>, then open your app and choose "Upload QR" or
+          "Scan from gallery".
+          <span id="pay-ref">Put your loan reference in the note, then send us the
+          transaction reference number.</span>
+        </p>
+        <div class="qrs">
+          <figure class="qr" style="margin:0">
+            <img src="/assets/assets/payment_qr/gcash.png" alt="GCash InstaPay QR code" loading="lazy">
+            <span class="name">GCash</span>
+            <a class="save" href="/assets/assets/payment_qr/gcash.png" download="GCash-QR.png">Save image</a>
+          </figure>
+          <figure class="qr" style="margin:0">
+            <img src="/assets/assets/payment_qr/aub.png" alt="AUB HelloMoney InstaPay QR code" loading="lazy">
+            <span class="name">AUB HelloMoney</span>
+            <a class="save" href="/assets/assets/payment_qr/aub.png" download="AUB-QR.png">Save image</a>
+          </figure>
+          <figure class="qr" style="margin:0">
+            <img src="/assets/assets/payment_qr/maribank.png" alt="MariBank InstaPay QR code" loading="lazy">
+            <span class="name">MariBank</span>
+            <a class="save" href="/assets/assets/payment_qr/maribank.png" download="MariBank-QR.png">Save image</a>
+          </figure>
+        </div>
+      </section>
     </section>
   </main>
 
@@ -193,6 +235,8 @@
         }
         $('hello').textContent = 'Hello, ' + loan.borrower;
         $('reference').textContent = loan.loan_reference + ' · ' + label(loan.loan_status);
+        $('pay-ref').textContent = 'Put your loan reference ' + loan.loan_reference +
+          ' in the note, then send us the transaction reference number.';
         $('m-total').textContent = money(loan.total_centavos);
         $('m-paid').textContent = money(loan.verified_paid_centavos);
         $('m-pending').textContent = money(loan.pending_centavos);
