@@ -881,7 +881,12 @@ class _PaymentLedger extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final rows = loan.ledgerRows();
-    final totalPaid = loan.paidCentavos;
+    final late = loan.paymentsAfterFinalDue;
+    final lateTotal = late.fold(0, (sum, p) => sum + p.amountCentavos);
+    final received = loan.payments.fold(0, (sum, p) => sum + p.amountCentavos);
+    final muted = TextStyle(
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
+    );
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -894,9 +899,18 @@ class _PaymentLedger extends StatelessWidget {
               Text(
                 'Opening balance: ${formatPeso(loan.summary.totalCentavos)}',
               ),
-              Text('Total paid: ${formatPeso(totalPaid)}'),
+              Text('Total received: ${formatPeso(received)}'),
+              Text('Applied: ${formatPeso(loan.paidCentavos)}'),
               Text('Balance: ${formatPeso(loan.outstandingCentavos)}'),
             ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Received = what the borrower actually paid during that cutoff '
+            '(after the previous due date, up to this one). Applied = what '
+            'was credited to that installment; extra money is applied to the '
+            'next unpaid installments.',
+            style: muted,
           ),
           const SizedBox(height: 12),
           Card(
@@ -907,8 +921,10 @@ class _PaymentLedger extends StatelessWidget {
                 columns: const [
                   DataColumn(label: Text('No.')),
                   DataColumn(label: Text('Due Date')),
+                  DataColumn(label: Text('Amount Due'), numeric: true),
+                  DataColumn(label: Text('Received'), numeric: true),
                   DataColumn(label: Text('Payment Date')),
-                  DataColumn(label: Text('Payment'), numeric: true),
+                  DataColumn(label: Text('Applied'), numeric: true),
                   DataColumn(label: Text('Ending Balance'), numeric: true),
                   DataColumn(label: Text('Status')),
                 ],
@@ -921,12 +937,26 @@ class _PaymentLedger extends StatelessWidget {
                           Text(formatPhilippineDate(row.installment.dueDate)),
                         ),
                         DataCell(
+                          Text(formatPeso(row.installment.amountCentavos)),
+                        ),
+                        DataCell(
                           Text(
-                            row.installment.lastPaymentAt == null
+                            row.received.isEmpty
                                 ? '—'
-                                : formatPhilippineDate(
-                                    row.installment.lastPaymentAt!.toLocal(),
-                                  ),
+                                : formatPeso(row.receivedCentavos),
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                        DataCell(
+                          Text(
+                            row.received.isEmpty
+                                ? '—'
+                                : row.received
+                                      .map(
+                                        (p) =>
+                                            formatPhilippineDate(p.receivedOn),
+                                      )
+                                      .join('\n'),
                           ),
                         ),
                         DataCell(
@@ -940,6 +970,14 @@ class _PaymentLedger extends StatelessWidget {
               ),
             ),
           ),
+          if (late.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              'Received after the final due date: ${formatPeso(lateTotal)} '
+              '(${late.map((p) => '${formatPeso(p.amountCentavos)} on ${formatPhilippineDate(p.receivedOn)}').join(', ')}).',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ],
         ],
       ),
     );

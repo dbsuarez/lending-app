@@ -41,12 +41,18 @@ class LoanSchedulePdf {
       sectionTitle: 'PAYMENT LEDGER',
       balances: [
         ('Opening balance', _money(loan.summary.totalCentavos)),
-        ('Total paid', _money(loan.paidCentavos)),
+        (
+          'Total received',
+          _money(loan.payments.fold(0, (sum, p) => sum + p.amountCentavos)),
+        ),
+        ('Applied', _money(loan.paidCentavos)),
         ('Balance', _money(loan.outstandingCentavos)),
       ],
       table: _ledgerTable(loan.ledgerRows(asOf: generated)),
       note:
-          'This ledger reflects verified payments recorded as of ${formatPhilippineDate(generated)}. Pending, rejected, and reversed payments are not included.',
+          'Received is what the borrower paid during each cutoff (after the previous due date, up to that due date); Applied is what was credited to that installment, with any extra applied to the next ones. '
+          '${_lateLine(loan)}'
+          'Verified payments as of ${formatPhilippineDate(generated)}; pending, rejected, and reversed payments are not included.',
     );
   }
 
@@ -426,13 +432,14 @@ class LoanSchedulePdf {
   static pw.Widget _ledgerTable(List<LedgerRow> rows) => pw.Table(
     border: pw.TableBorder.all(color: _border, width: .55),
     columnWidths: const {
-      0: pw.FixedColumnWidth(30),
-      1: pw.FlexColumnWidth(1.3),
-      2: pw.FlexColumnWidth(1.3),
-      3: pw.FlexColumnWidth(1.3),
-      4: pw.FlexColumnWidth(1.3),
-      5: pw.FlexColumnWidth(1.4),
-      6: pw.FlexColumnWidth(1),
+      0: pw.FixedColumnWidth(24),
+      1: pw.FlexColumnWidth(1.25),
+      2: pw.FlexColumnWidth(1.2),
+      3: pw.FlexColumnWidth(1.2),
+      4: pw.FlexColumnWidth(1.25),
+      5: pw.FlexColumnWidth(1.2),
+      6: pw.FlexColumnWidth(1.3),
+      7: pw.FlexColumnWidth(1),
     },
     children: [
       pw.TableRow(
@@ -441,8 +448,9 @@ class LoanSchedulePdf {
           _headerCell('#'),
           _headerCell('Due date'),
           _headerCell('Amount due', right: true),
+          _headerCell('Received', right: true),
           _headerCell('Payment date'),
-          _headerCell('Paid', right: true),
+          _headerCell('Applied', right: true),
           _headerCell('Ending balance', right: true),
           _headerCell('Status'),
         ],
@@ -457,11 +465,18 @@ class LoanSchedulePdf {
             _cell(formatPhilippineDate(rows[index].installment.dueDate)),
             _cell(_money(rows[index].installment.amountCentavos), right: true),
             _cell(
-              rows[index].installment.lastPaymentAt == null
+              rows[index].received.isEmpty
                   ? '-'
-                  : formatPhilippineDate(
-                      rows[index].installment.lastPaymentAt!.toLocal(),
-                    ),
+                  : _money(rows[index].receivedCentavos),
+              right: true,
+              bold: true,
+            ),
+            _cell(
+              rows[index].received.isEmpty
+                  ? '-'
+                  : rows[index].received
+                        .map((p) => formatPhilippineDate(p.receivedOn))
+                        .join('\n'),
             ),
             _cell(_money(rows[index].installment.paidCentavos), right: true),
             _cell(
@@ -474,6 +489,14 @@ class LoanSchedulePdf {
         ),
     ],
   );
+
+  static String _lateLine(LoanDetail loan) {
+    final late = loan.paymentsAfterFinalDue;
+    if (late.isEmpty) return '';
+    final total = late.fold(0, (sum, p) => sum + p.amountCentavos);
+    return 'Received after the final due date: ${_money(total)} '
+        '(${late.map((p) => '${_money(p.amountCentavos)} on ${formatPhilippineDate(p.receivedOn)}').join(', ')}). ';
+  }
 
   static String _statusLabel(String status) =>
       status[0].toUpperCase() + status.substring(1);

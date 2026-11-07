@@ -107,11 +107,50 @@ class LoanSummary {
   );
 }
 
+/// A verified payment as received from the borrower (before it is split
+/// across installments).
+class ReceivedPayment {
+  const ReceivedPayment({
+    required this.amountCentavos,
+    required this.receivedAt,
+  });
+  final int amountCentavos;
+  final DateTime receivedAt;
+
+  /// Calendar day received, in local time (what the borrower sees).
+  DateTime get receivedOn {
+    final local = receivedAt.toLocal();
+    return DateTime(local.year, local.month, local.day);
+  }
+}
+
 class LoanDetail {
-  const LoanDetail({required this.summary, required this.installments});
+  const LoanDetail({
+    required this.summary,
+    required this.installments,
+    this.payments = const [],
+  });
 
   final LoanSummary summary;
   final List<Installment> installments;
+
+  /// Verified payments on this loan, as received.
+  final List<ReceivedPayment> payments;
+
+  /// Verified payments received after the final due date (late), which no
+  /// cutoff row covers.
+  List<ReceivedPayment> get paymentsAfterFinalDue {
+    if (installments.isEmpty) return const [];
+    final finalDue = installments
+        .map((i) => i.dueDate)
+        .reduce((a, b) => a.isAfter(b) ? a : b);
+    final lastDay = DateTime(finalDue.year, finalDue.month, finalDue.day);
+    return [
+      for (final p in payments)
+        if (p.receivedOn.isAfter(lastDay)) p,
+    ]..sort((a, b) => a.receivedAt.compareTo(b.receivedAt));
+  }
+
   int get paidCentavos =>
       installments.fold(0, (sum, item) => sum + item.paidCentavos);
   int get outstandingCentavos =>
@@ -124,10 +163,30 @@ class LoanDetail {
     var runningBalance = summary.totalCentavos;
     final sorted = [...installments]
       ..sort((a, b) => a.sequence.compareTo(b.sequence));
+    final received = [...payments]
+      ..sort((a, b) => a.receivedAt.compareTo(b.receivedAt));
+    DateTime? previousDue;
     return [
       for (final item in sorted)
         LedgerRow(
           installment: item,
+          // What the borrower actually paid during this cutoff: verified
+          // payments received after the previous due date, up to this one.
+          received: () {
+            final due = DateTime(
+              item.dueDate.year,
+              item.dueDate.month,
+              item.dueDate.day,
+            );
+            final from = previousDue;
+            previousDue = due;
+            return [
+              for (final p in received)
+                if (!p.receivedOn.isAfter(due) &&
+                    (from == null || p.receivedOn.isAfter(from)))
+                  p,
+            ];
+          }(),
           endingBalanceCentavos: runningBalance =
               (runningBalance - item.paidCentavos).clamp(
                 0,
@@ -150,9 +209,16 @@ class LedgerRow {
     required this.installment,
     required this.endingBalanceCentavos,
     required this.status,
+    this.received = const [],
   });
   final Installment installment;
   final int endingBalanceCentavos;
+
+  /// Payments actually received during this cutoff (may be more or less
+  /// than what was applied to this installment).
+  final List<ReceivedPayment> received;
+  int get receivedCentavos =>
+      received.fold(0, (sum, p) => sum + p.amountCentavos);
 
   /// One of paid, partial, overdue, upcoming.
   final String status;

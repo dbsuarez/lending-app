@@ -6,7 +6,7 @@ const _loanColumns =
     'monthly_rate_basis_points, term_months, status, is_personal, created_at, '
     'borrower:borrowers(first_name,last_name), '
     'disbursement:loan_disbursements(disbursed_on,voided_at), '
-    'payments(status,received_at)';
+    'payments(status,received_at,amount_centavos)';
 
 class SupabaseLoansRepository {
   SupabaseLoansRepository(this._client);
@@ -115,6 +115,14 @@ class SupabaseLoansRepository {
     }
     return LoanDetail(
       summary: _fromRow(row),
+      payments: [
+        for (final payment in (row['payments'] as List?) ?? const [])
+          if ((payment as Map)['status'] == 'verified')
+            ReceivedPayment(
+              amountCentavos: payment['amount_centavos'] as int,
+              receivedAt: DateTime.parse(payment['received_at'] as String),
+            ),
+      ],
       installments: [
         for (final item in installmentRows)
           Installment(
