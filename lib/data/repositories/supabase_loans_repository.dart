@@ -6,7 +6,7 @@ const _loanColumns =
     'monthly_rate_basis_points, term_months, status, is_personal, created_at, '
     'borrower:borrowers(first_name,last_name), '
     'disbursement:loan_disbursements(disbursed_on,voided_at), '
-    'payments(status,received_at,amount_centavos)';
+    'payments(id,status,received_at,amount_centavos)';
 
 class SupabaseLoansRepository {
   SupabaseLoansRepository(this._client);
@@ -91,15 +91,27 @@ class SupabaseLoansRepository {
     final allocationRows = await _client
         .from('payment_allocations')
         .select(
-          'installment_id,principal_centavos,interest_centavos,penalty_centavos,installment:installments!inner(sequence),payment:payments!inner(status,received_at)',
+          'installment_id,payment_id,principal_centavos,interest_centavos,penalty_centavos,installment:installments!inner(sequence),payment:payments!inner(status,received_at)',
         )
         .eq('organization_id', orgId)
         .eq('installment.loan_id', id)
         .eq('payment.status', 'verified');
     final paidBySequence = <int, int>{};
     final paidAtBySequence = <int, DateTime>{};
+    // payment id -> sequence -> amount applied, to place each payment on the
+    // installment it paid the most of.
+    final appliedByPayment = <String, Map<int, int>>{};
     for (final allocation in allocationRows) {
       final sequence = (allocation['installment'] as Map)['sequence'] as int;
+      final share =
+          (allocation['principal_centavos'] as int) +
+          (allocation['interest_centavos'] as int) +
+          (allocation['penalty_centavos'] as int);
+      final perSequence = appliedByPayment.putIfAbsent(
+        allocation['payment_id'] as String,
+        () => {},
+      );
+      perSequence[sequence] = (perSequence[sequence] ?? 0) + share;
       paidBySequence[sequence] =
           (paidBySequence[sequence] ?? 0) +
           (allocation['principal_centavos'] as int) +
@@ -121,6 +133,9 @@ class SupabaseLoansRepository {
             ReceivedPayment(
               amountCentavos: payment['amount_centavos'] as int,
               receivedAt: DateTime.parse(payment['received_at'] as String),
+              appliedSequence: _largestShare(
+                appliedByPayment[payment['id'] as String],
+              ),
             ),
       ],
       installments: [
@@ -364,6 +379,19 @@ class SupabaseLoansRepository {
           ),
         ),
     ];
+  }
+
+  /// The installment sequence that received the largest share (earliest on
+  /// a tie), or null if nothing was applied.
+  static int? _largestShare(Map<int, int>? perSequence) {
+    if (perSequence == null || perSequence.isEmpty) return null;
+    final entries = perSequence.entries.toList()
+      ..sort(
+        (a, b) => b.value != a.value
+            ? b.value.compareTo(a.value)
+            : a.key.compareTo(b.key),
+      );
+    return entries.first.key;
   }
 
   LoanSummary _fromRow(Map<String, dynamic> row) {

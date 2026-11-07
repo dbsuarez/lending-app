@@ -167,6 +167,20 @@ const glossary = <String, ({String title, String body})>{
         'schedule and payments. It is read-only and works until you revoke '
         'it.',
   ),
+  'received': (
+    title: 'Received',
+    body:
+        'What the borrower actually paid for this cutoff, and the date the '
+        'money came in. A payment made a day or two late still shows on the '
+        'cutoff it paid.',
+  ),
+  'applied': (
+    title: 'Applied',
+    body:
+        'How much was credited to this installment. Payments always pay the '
+        'oldest unpaid installment first (interest, then principal); any '
+        'extra goes to the next one.',
+  ),
   'extension_preview': (
     title: 'Extension preview',
     body:

@@ -113,9 +113,16 @@ class ReceivedPayment {
   const ReceivedPayment({
     required this.amountCentavos,
     required this.receivedAt,
+    this.appliedSequence,
   });
   final int amountCentavos;
   final DateTime receivedAt;
+
+  /// The installment this payment paid the most of (from its allocations).
+  /// The ledger shows the payment on that row, so a payment entered a day
+  /// late still appears on the cutoff it was meant for. Null when the
+  /// payment was not applied to any installment (e.g. an overpayment).
+  final int? appliedSequence;
 
   /// Calendar day received, in local time (what the borrower sees).
   DateTime get receivedOn {
@@ -147,7 +154,7 @@ class LoanDetail {
     final lastDay = DateTime(finalDue.year, finalDue.month, finalDue.day);
     return [
       for (final p in payments)
-        if (p.receivedOn.isAfter(lastDay)) p,
+        if (p.appliedSequence == null && p.receivedOn.isAfter(lastDay)) p,
     ]..sort((a, b) => a.receivedAt.compareTo(b.receivedAt));
   }
 
@@ -182,8 +189,12 @@ class LoanDetail {
             previousDue = due;
             return [
               for (final p in received)
-                if (!p.receivedOn.isAfter(due) &&
-                    (from == null || p.receivedOn.isAfter(from)))
+                // Applied payments go on the installment they paid most of;
+                // unapplied ones fall back to the cutoff their date is in.
+                if (p.appliedSequence != null
+                    ? p.appliedSequence == item.sequence
+                    : !p.receivedOn.isAfter(due) &&
+                          (from == null || p.receivedOn.isAfter(from)))
                   p,
             ];
           }(),

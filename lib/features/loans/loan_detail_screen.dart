@@ -79,16 +79,27 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
     length: 6,
     child: Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _breadcrumbs(loan),
-              const SizedBox(height: 6),
-              _detailHeader(loan),
-            ],
-          ),
+        Builder(
+          builder: (context) {
+            // Phones: no breadcrumb (the back arrow does the same) and less
+            // padding, so more of the loan fits on screen.
+            final phone = MediaQuery.sizeOf(context).width < 700;
+            return Padding(
+              padding: phone
+                  ? const EdgeInsets.fromLTRB(8, 4, 12, 0)
+                  : const EdgeInsets.fromLTRB(24, 20, 24, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (!phone) ...[
+                    _breadcrumbs(loan),
+                    const SizedBox(height: 6),
+                  ],
+                  _detailHeader(loan),
+                ],
+              ),
+            );
+          },
         ),
         const TabBar(
           isScrollable: true,
@@ -304,20 +315,12 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
               AppStatusBadge(loan.summary.status),
             ],
           ),
-          const SizedBox(height: 6),
-          Wrap(
-            alignment: WrapAlignment.end,
-            spacing: 6,
-            runSpacing: 6,
-            crossAxisAlignment: WrapCrossAlignment.center,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
             children: [
               ...utilityActions,
-              ...loanActions,
-              TextButton.icon(
-                onPressed: () => _showActionGlossary(loan),
-                icon: const Icon(Icons.info_outline, size: 18),
-                label: const Text('What do these mean?'),
-              ),
+              const SizedBox(width: 4),
+              _actionsMenu(loan),
             ],
           ),
         ],
@@ -326,6 +329,69 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
   );
 
   UndoController get _undo => ref.read(undoControllerProvider.notifier);
+
+  /// Phones: every loan action in one "Actions" dropdown to save space.
+  Widget _actionsMenu(LoanDetail loan) {
+    final status = loan.summary.status;
+    MenuItemButton item(IconData icon, String label, VoidCallback onPressed) =>
+        MenuItemButton(
+          leadingIcon: Icon(icon),
+          onPressed: onPressed,
+          child: Text(label),
+        );
+    return MenuAnchor(
+      menuChildren: [
+        if (status == 'draft') ...[
+          item(
+            Icons.verified_outlined,
+            'Confirm & Disburse',
+            () => _activate(loan),
+          ),
+          item(Icons.cancel_outlined, 'Cancel Draft', () => _cancelDraft(loan)),
+        ],
+        if (status == 'active') ...[
+          item(
+            Icons.request_quote_outlined,
+            'Preview Extension',
+            () => showDialog<void>(
+              context: context,
+              builder: (_) => ExtensionPreviewDialog(loan),
+            ),
+          ),
+          item(
+            Icons.edit_calendar_outlined,
+            'Change Due Date',
+            () => _amendDueDate(loan),
+          ),
+          item(Icons.autorenew, 'Refinance', () => _refinance(loan)),
+          item(
+            Icons.savings_outlined,
+            'Early Payoff',
+            () => _earlyPayoff(loan),
+          ),
+        ],
+        item(
+          loan.summary.isPersonal
+              ? Icons.business_center_outlined
+              : Icons.person_outline,
+          loan.summary.isPersonal ? 'Move to Business' : 'Mark Personal',
+          () => _setPersonal(loan),
+        ),
+        const Divider(height: 1),
+        item(
+          Icons.info_outline,
+          'What do these mean?',
+          () => _showActionGlossary(loan),
+        ),
+      ],
+      builder: (context, controller, _) => FilledButton.tonalIcon(
+        onPressed: () =>
+            controller.isOpen ? controller.close() : controller.open(),
+        icon: const Icon(Icons.expand_more),
+        label: const Text('Actions'),
+      ),
+    );
+  }
 
   /// Hover (desktop) or long-press (phone) shows the plain explanation.
   Widget _explained(String term, Widget child) => Tooltip(
@@ -895,96 +961,150 @@ class _PaymentLedger extends StatelessWidget {
     final late = loan.paymentsAfterFinalDue;
     final lateTotal = late.fold(0, (sum, p) => sum + p.amountCentavos);
     final received = loan.payments.fold(0, (sum, p) => sum + p.amountCentavos);
-    final muted = TextStyle(
-      color: Theme.of(context).colorScheme.onSurfaceVariant,
-    );
+    final compact = MediaQuery.sizeOf(context).width < 600;
+    String dates(LedgerRow row) => row.received.isEmpty
+        ? '—'
+        : row.received
+              .map((p) => formatPhilippineDate(p.receivedOn))
+              .join('\n');
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(compact ? 16 : 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Wrap(
             spacing: 16,
             runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Text(
                 'Opening balance: ${formatPeso(loan.summary.totalCentavos)}',
               ),
-              Text('Total received: ${formatPeso(received)}'),
-              Text('Applied: ${formatPeso(loan.paidCentavos)}'),
+              _labelWithInfo(
+                'Total received: ${formatPeso(received)}',
+                'received',
+              ),
+              _labelWithInfo(
+                'Applied: ${formatPeso(loan.paidCentavos)}',
+                'applied',
+              ),
               Text('Balance: ${formatPeso(loan.outstandingCentavos)}'),
             ],
           ),
-          const SizedBox(height: 6),
-          Text(
-            'Received = what the borrower actually paid during that cutoff '
-            '(after the previous due date, up to this one). Applied = what '
-            'was credited to that installment; extra money is applied to the '
-            'next unpaid installments.',
-            style: muted,
-          ),
           const SizedBox(height: 12),
-          Card(
-            clipBehavior: Clip.antiAlias,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: DataTable(
-                columns: const [
-                  DataColumn(label: Text('No.')),
-                  DataColumn(label: Text('Due Date')),
-                  DataColumn(label: Text('Amount Due'), numeric: true),
-                  DataColumn(label: Text('Received'), numeric: true),
-                  DataColumn(label: Text('Payment Date')),
-                  DataColumn(label: Text('Applied'), numeric: true),
-                  DataColumn(label: Text('Ending Balance'), numeric: true),
-                  DataColumn(label: Text('Status')),
-                ],
-                rows: [
-                  for (final row in rows)
-                    DataRow(
-                      cells: [
-                        DataCell(Text('${row.installment.sequence}')),
-                        DataCell(
-                          Text(formatPhilippineDate(row.installment.dueDate)),
-                        ),
-                        DataCell(
-                          Text(formatPeso(row.installment.amountCentavos)),
-                        ),
-                        DataCell(
+          if (compact)
+            // Phones: one card per installment so every value is visible
+            // without scrolling sideways.
+            for (final row in rows)
+              Card(
+                margin: const EdgeInsets.only(bottom: 8),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
                           Text(
-                            row.received.isEmpty
-                                ? '—'
-                                : formatPeso(row.receivedCentavos),
+                            '#${row.installment.sequence}  '
+                            '${formatPhilippineDate(row.installment.dueDate)}',
                             style: const TextStyle(fontWeight: FontWeight.w700),
                           ),
-                        ),
-                        DataCell(
-                          Text(
-                            row.received.isEmpty
-                                ? '—'
-                                : row.received
-                                      .map(
-                                        (p) =>
-                                            formatPhilippineDate(p.receivedOn),
-                                      )
-                                      .join('\n'),
-                          ),
-                        ),
-                        DataCell(
-                          Text(formatPeso(row.installment.paidCentavos)),
-                        ),
-                        DataCell(Text(formatPeso(row.endingBalanceCentavos))),
-                        DataCell(AppStatusBadge(row.status)),
-                      ],
+                          const Spacer(),
+                          AppStatusBadge(row.status),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      _line(
+                        'Amount due',
+                        formatPeso(row.installment.amountCentavos),
+                      ),
+                      _line(
+                        'Received',
+                        row.received.isEmpty
+                            ? '—'
+                            : formatPeso(row.receivedCentavos),
+                        info: 'received',
+                        bold: true,
+                      ),
+                      if (row.received.isNotEmpty)
+                        _line('Payment date', dates(row)),
+                      _line(
+                        'Applied',
+                        formatPeso(row.installment.paidCentavos),
+                        info: 'applied',
+                      ),
+                      _line(
+                        'Ending balance',
+                        formatPeso(row.endingBalanceCentavos),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+          else
+            Card(
+              clipBehavior: Clip.antiAlias,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: DataTable(
+                  columns: [
+                    const DataColumn(label: Text('No.')),
+                    const DataColumn(label: Text('Due Date')),
+                    const DataColumn(label: Text('Amount Due'), numeric: true),
+                    DataColumn(
+                      label: _labelWithInfo('Received', 'received'),
+                      numeric: true,
                     ),
-                ],
+                    const DataColumn(label: Text('Payment Date')),
+                    DataColumn(
+                      label: _labelWithInfo('Applied', 'applied'),
+                      numeric: true,
+                    ),
+                    const DataColumn(
+                      label: Text('Ending Balance'),
+                      numeric: true,
+                    ),
+                    const DataColumn(label: Text('Status')),
+                  ],
+                  rows: [
+                    for (final row in rows)
+                      DataRow(
+                        cells: [
+                          DataCell(Text('${row.installment.sequence}')),
+                          DataCell(
+                            Text(formatPhilippineDate(row.installment.dueDate)),
+                          ),
+                          DataCell(
+                            Text(formatPeso(row.installment.amountCentavos)),
+                          ),
+                          DataCell(
+                            Text(
+                              row.received.isEmpty
+                                  ? '—'
+                                  : formatPeso(row.receivedCentavos),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          DataCell(Text(dates(row))),
+                          DataCell(
+                            Text(formatPeso(row.installment.paidCentavos)),
+                          ),
+                          DataCell(Text(formatPeso(row.endingBalanceCentavos))),
+                          DataCell(AppStatusBadge(row.status)),
+                        ],
+                      ),
+                  ],
+                ),
               ),
             ),
-          ),
           if (late.isNotEmpty) ...[
             const SizedBox(height: 10),
             Text(
-              'Received after the final due date: ${formatPeso(lateTotal)} '
+              'Not applied to any installment (received after the final due '
+              'date): ${formatPeso(lateTotal)} '
               '(${late.map((p) => '${formatPeso(p.amountCentavos)} on ${formatPhilippineDate(p.receivedOn)}').join(', ')}).',
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
@@ -993,6 +1113,35 @@ class _PaymentLedger extends StatelessWidget {
       ),
     );
   }
+
+  static Widget _labelWithInfo(String text, String term) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [Text(text), InfoTip(term, size: 16)],
+  );
+
+  static Widget _line(
+    String label,
+    String value, {
+    String? info,
+    bool bold = false,
+  }) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 2),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label),
+        if (info != null) InfoTip(info, size: 15),
+        const Spacer(),
+        Text(
+          value,
+          textAlign: TextAlign.right,
+          style: TextStyle(
+            fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
 class _Schedule extends StatefulWidget {

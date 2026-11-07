@@ -76,4 +76,39 @@ void main() {
     expect(rows[1].receivedCentavos, 260000);
     expect(rows[1].received, hasLength(2));
   });
+
+  test('applied payments show on the cutoff they paid, even if dated late', () {
+    // Kristoper's pattern: the 08-20 payment was entered as 08-21 and the
+    // 09-20 one as 09-22; allocations (oldest first) say which cutoff each
+    // payment was really for.
+    ReceivedPayment p(int pesos, DateTime at, int seq) => ReceivedPayment(
+      amountCentavos: pesos * 100,
+      receivedAt: at,
+      appliedSequence: seq,
+    );
+    final loan = LoanDetail(
+      summary: _loan(const []).summary,
+      installments: [
+        _inst(1, DateTime(2025, 8, 5), paid: 260000),
+        _inst(2, DateTime(2025, 8, 20), paid: 260000),
+        _inst(3, DateTime(2025, 9, 5), paid: 260000),
+        _inst(4, DateTime(2025, 9, 20), paid: 100000),
+      ],
+      payments: [
+        p(2600, DateTime(2025, 8, 5), 1),
+        p(2600, DateTime(2025, 8, 21), 2), // a day after cutoff 2
+        p(2600, DateTime(2025, 9, 6), 3), // a day after cutoff 3
+        p(1000, DateTime(2025, 9, 22), 4),
+      ],
+    );
+    final rows = loan.ledgerRows(asOf: DateTime(2025, 10, 1));
+    expect(rows.map((r) => r.receivedCentavos), [
+      260000,
+      260000,
+      260000,
+      100000,
+    ]);
+    expect(rows[1].received.single.receivedOn, DateTime(2025, 8, 21));
+    expect(loan.paymentsAfterFinalDue, isEmpty);
+  });
 }

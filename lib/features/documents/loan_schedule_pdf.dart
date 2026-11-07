@@ -50,7 +50,7 @@ class LoanSchedulePdf {
       ],
       table: _ledgerTable(loan.ledgerRows(asOf: generated)),
       note:
-          'Received is what the borrower paid during each cutoff (after the previous due date, up to that due date); Applied is what was credited to that installment, with any extra applied to the next ones. '
+          'Received shows each payment on the installment it paid, with the date the money came in. Applied is what was credited to that installment; payments pay the oldest unpaid installment first and any extra goes to the next one. '
           '${_lateLine(loan)}'
           'Verified payments as of ${formatPhilippineDate(generated)}; pending, rejected, and reversed payments are not included.',
     );
@@ -494,7 +494,7 @@ class LoanSchedulePdf {
     final late = loan.paymentsAfterFinalDue;
     if (late.isEmpty) return '';
     final total = late.fold(0, (sum, p) => sum + p.amountCentavos);
-    return 'Received after the final due date: ${_money(total)} '
+    return 'Not applied to any installment (received after the final due date): ${_money(total)} '
         '(${late.map((p) => '${_money(p.amountCentavos)} on ${formatPhilippineDate(p.receivedOn)}').join(', ')}). ';
   }
 
