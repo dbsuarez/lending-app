@@ -69,6 +69,7 @@ class LoanSchedulePdf {
     final blue = _blue;
     final paleBlue = _paleBlue;
     final border = _border;
+    final paymentQrs = await _paymentQrs();
 
     document.addPage(
       pw.MultiPage(
@@ -177,11 +178,111 @@ class LoanSchedulePdf {
               ),
             ),
           ),
+          if (paymentQrs.isNotEmpty)
+            _howToPay(paymentQrs, _reference(loan.summary.id), border),
         ],
       ),
     );
     return document.save();
   }
+
+  /// InstaPay QR codes printed on borrower documents (schedule and ledger).
+  static const _qrAssets = [
+    ('GCash', 'assets/payment_qr/gcash.png'),
+    ('AUB HelloMoney', 'assets/payment_qr/aub.png'),
+    ('MariBank', 'assets/payment_qr/maribank.png'),
+  ];
+  static List<(String, pw.ImageProvider)>? _cachedQrs;
+
+  static Future<List<(String, pw.ImageProvider)>> _paymentQrs() async {
+    final cached = _cachedQrs;
+    if (cached != null) return cached;
+    final loaded = <(String, pw.ImageProvider)>[];
+    for (final (label, path) in _qrAssets) {
+      final data = await rootBundle.load(path);
+      loaded.add((label, pw.MemoryImage(data.buffer.asUint8List())));
+    }
+    return _cachedQrs = loaded;
+  }
+
+  /// One block (title, instructions, QR row) so it moves to the next page
+  /// as a whole instead of splitting.
+  static pw.Widget _howToPay(
+    List<(String, pw.ImageProvider)> qrs,
+    String reference,
+    PdfColor border,
+  ) => pw.Padding(
+    padding: const pw.EdgeInsets.only(top: 16),
+    // A horizontal Row cannot span pages (vertical Columns can), so this
+    // keeps the heading and QR codes together, moving them to the next page
+    // as one block when they do not fit.
+    child: pw.Row(
+      children: [
+        pw.Expanded(
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(
+                'HOW TO PAY',
+                style: pw.TextStyle(
+                  color: _blue,
+                  fontSize: 12,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+              pw.SizedBox(height: 4),
+              pw.Text(
+                'Scan any QR code with a banking or e-wallet app that supports '
+                'InstaPay. Put your loan reference $reference in the note, then '
+                'send us the transaction reference number so we can confirm it.',
+                style: const pw.TextStyle(
+                  fontSize: 8.5,
+                  color: PdfColors.grey800,
+                ),
+              ),
+              pw.SizedBox(height: 8),
+              pw.Row(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  for (var i = 0; i < qrs.length; i++) ...[
+                    if (i > 0) pw.SizedBox(width: 10),
+                    pw.Expanded(
+                      child: pw.Container(
+                        padding: const pw.EdgeInsets.all(6),
+                        decoration: pw.BoxDecoration(
+                          border: pw.Border.all(color: border, width: .6),
+                          borderRadius: const pw.BorderRadius.all(
+                            pw.Radius.circular(4),
+                          ),
+                        ),
+                        child: pw.Column(
+                          children: [
+                            pw.Image(
+                              qrs[i].$2,
+                              height: 165,
+                              fit: pw.BoxFit.contain,
+                            ),
+                            pw.SizedBox(height: 4),
+                            pw.Text(
+                              qrs[i].$1,
+                              style: pw.TextStyle(
+                                fontSize: 9,
+                                fontWeight: pw.FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
 
   static pw.Widget _identity(LoanDetail loan, PdfColor blue) => pw.Row(
     crossAxisAlignment: pw.CrossAxisAlignment.start,
