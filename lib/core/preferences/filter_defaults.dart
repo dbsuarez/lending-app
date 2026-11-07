@@ -101,19 +101,23 @@ class DefaultableFilterDropdown extends ConsumerWidget {
                     );
                   }
                 },
-                child: Row(
-                  children: [
-                    Expanded(child: Text(option.$2)),
-                    if (option.$1 == current)
-                      Tooltip(
-                        message: 'Default',
-                        child: Icon(
-                          Icons.push_pin,
-                          size: 16,
-                          color: Theme.of(context).colorScheme.primary,
+                // Plain-text marker: reliable on every renderer, and clearer
+                // than an icon.
+                child: Text.rich(
+                  TextSpan(
+                    text: option.$2,
+                    children: [
+                      if (option.$1 == current)
+                        TextSpan(
+                          text: '  · default',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),

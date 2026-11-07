@@ -26,7 +26,9 @@ $buildId = [TimeZoneInfo]::ConvertTimeFromUtc([DateTime]::UtcNow, $tz).ToString(
 
 # flutter writes notices to stderr; don't treat them as failures.
 $ErrorActionPreference = 'Continue'
-fvm flutter build web --release `
+# --pwa-strategy=none: no offline cache, so a deploy shows on the next reload
+# (the default cache kept serving the previous version until a 2nd reload).
+fvm flutter build web --release --pwa-strategy=none `
   "--dart-define=SUPABASE_URL=$($envMap.SUPABASE_URL)" `
   "--dart-define=SUPABASE_ANON_KEY=$($envMap.SUPABASE_ANON_KEY)" `
   "--dart-define=APP_ENV=production" `

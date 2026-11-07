@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
+import '../../core/preferences/filter_defaults.dart';
 import '../../core/undo/undo_controller.dart';
 import '../../core/formatting.dart';
 import '../../domain/models/models.dart';
@@ -12,8 +13,11 @@ final _queueFilterProvider = NotifierProvider<_QueueFilter, String>(
 );
 
 class _QueueFilter extends Notifier<String> {
+  static const listKey = 'collections.queue';
+
+  // Upcoming unless the user long-pressed another option as the default.
   @override
-  String build() => 'all';
+  String build() => ref.read(filterDefaultsProvider).get(listKey, 'upcoming');
 
   void select(String value) => state = value;
 }
@@ -200,16 +204,61 @@ class _Queue extends ConsumerWidget {
             children: [
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
-                child: SegmentedButton<String>(
-                  segments: const [
-                    ButtonSegment(value: 'all', label: Text('All')),
-                    ButtonSegment(value: 'upcoming', label: Text('Upcoming')),
-                    ButtonSegment(value: 'overdue', label: Text('Overdue')),
+                child: Column(
+                  children: [
+                    SegmentedButton<String>(
+                      segments: [
+                        for (final (value, label) in const [
+                          ('all', 'All'),
+                          ('upcoming', 'Upcoming'),
+                          ('overdue', 'Overdue'),
+                        ])
+                          ButtonSegment(
+                            value: value,
+                            // Long-press a segment to make it the default.
+                            label: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onLongPress: () async {
+                                await ref
+                                    .read(filterDefaultsProvider)
+                                    .set(_QueueFilter.listKey, value);
+                                ref
+                                    .read(_queueFilterProvider.notifier)
+                                    .select(value);
+                                if (context.mounted) {
+                                  undoOf(context).notify(
+                                    '"$label" is now the default for Collections.',
+                                  );
+                                }
+                              },
+                              child: Text(
+                                ref
+                                            .read(filterDefaultsProvider)
+                                            .get(
+                                              _QueueFilter.listKey,
+                                              'upcoming',
+                                            ) ==
+                                        value
+                                    ? '$label •'
+                                    : label,
+                              ),
+                            ),
+                          ),
+                      ],
+                      selected: {filter},
+                      onSelectionChanged: (value) => ref
+                          .read(_queueFilterProvider.notifier)
+                          .select(value.first),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Long-press an option to make it the default (•).',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
                   ],
-                  selected: {filter},
-                  onSelectionChanged: (value) => ref
-                      .read(_queueFilterProvider.notifier)
-                      .select(value.first),
                 ),
               ),
               Expanded(
