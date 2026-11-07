@@ -19,6 +19,7 @@ import '../features/settings/settings_screen.dart';
 import '../features/settings/audit_events_screen.dart';
 import 'refined_shell.dart';
 import '../core/undo/undo_controller.dart';
+import '../core/security/app_lock.dart';
 import 'theme/app_theme.dart';
 import 'theme/theme_mode_provider.dart';
 import '../core/theme/palette_provider.dart';
@@ -104,6 +105,11 @@ class LendingManagerApp extends ConsumerWidget {
       routerConfig: _router,
       // App-wide so transaction/undo messages persist across navigation.
       scaffoldMessengerKey: rootScaffoldMessengerKey,
+      // Fingerprint/face lock over the whole app (Android only in practice).
+      builder: (context, child) => AppLockGate(
+        onUsePassword: () => _router.go('/login'),
+        child: child ?? const SizedBox.shrink(),
+      ),
     );
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/config/app_config.dart';
+import '../../core/security/app_lock.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -31,6 +32,7 @@ class _LoginScreenState extends State<LoginScreen> {
         email: email.text.trim(),
         password: password.text,
       );
+      if (mounted) await offerBiometricUnlock(context);
       if (mounted) context.go('/dashboard');
     } on AuthException catch (error) {
       if (mounted) _showMessage(error.message);

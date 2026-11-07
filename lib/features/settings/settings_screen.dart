@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/undo/undo_controller.dart';
+import '../../core/security/app_lock.dart';
 import '../../core/config/app_config.dart';
 import '../../core/theme/theme_preferences_panel.dart';
 import 'operations_config_provider.dart';
@@ -26,6 +27,7 @@ class SettingsScreen extends ConsumerWidget {
           children: [
             const ThemePreferencesPanel(),
             const Divider(height: 1),
+            const _BiometricUnlockTile(),
             ListTile(
               leading: const Icon(Icons.backup_outlined),
               title: const Text('Export encrypted-storage backup source'),
@@ -761,5 +763,60 @@ class _BusinessProfileDialogState
         child: const Text('Save Changes'),
       ),
     ],
+  );
+}
+
+/// "Unlock with fingerprint or face". Hidden where biometrics are not
+/// available (web, devices without a fingerprint or face set up).
+class _BiometricUnlockTile extends ConsumerStatefulWidget {
+  const _BiometricUnlockTile();
+
+  @override
+  ConsumerState<_BiometricUnlockTile> createState() =>
+      _BiometricUnlockTileState();
+}
+
+class _BiometricUnlockTileState extends ConsumerState<_BiometricUnlockTile> {
+  late final Future<bool> available = ref
+      .read(appLockProvider.notifier)
+      .isAvailable();
+  bool busy = false;
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<bool>(
+    future: available,
+    builder: (context, snapshot) {
+      if (snapshot.data != true) return const SizedBox.shrink();
+      final enabled = ref.watch(appLockProvider.select((s) => s.enabled));
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SwitchListTile(
+            secondary: const Icon(Icons.fingerprint),
+            title: const Text('Unlock with fingerprint or face'),
+            subtitle: const Text(
+              'Asked when you open the app or return after a minute away.',
+            ),
+            value: enabled,
+            onChanged: busy
+                ? null
+                : (value) async {
+                    setState(() => busy = true);
+                    final ok = await ref
+                        .read(appLockProvider.notifier)
+                        .setEnabled(value);
+                    if (!context.mounted) return;
+                    setState(() => busy = false);
+                    if (!ok) {
+                      undoOf(
+                        context,
+                      ).notify('Fingerprint unlock was not turned on.');
+                    }
+                  },
+          ),
+          const Divider(height: 1),
+        ],
+      );
+    },
   );
 }
