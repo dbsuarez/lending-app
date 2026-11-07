@@ -259,12 +259,22 @@ class LoanShareLinkSummary {
     required this.createdAt,
     required this.revokedAt,
     required this.lastAccessedAt,
+    this.token,
   });
   final String id;
   final DateTime createdAt;
   final DateTime? revokedAt, lastAccessedAt;
+
+  /// Null for links created before tokens were stored; those still work but
+  /// cannot be copied again.
+  final String? token;
   bool get isActive => revokedAt == null;
+  bool get canCopy => isActive && token != null;
 }
+
+/// Result of "get customer link": the loan's link, and whether it already
+/// existed (reused) or was just created.
+typedef CustomerLink = ({String id, String token, bool reused});
 
 class CollectionActivity {
   const CollectionActivity({

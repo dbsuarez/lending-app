@@ -181,7 +181,7 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
       final utilityActions = <Widget>[
         LoanPrintMenu(loadLoan: () async => loan),
         IconButton(
-          tooltip: 'Create customer status link',
+          tooltip: 'Get customer link',
           onPressed: () => _createShareLink(loan),
           icon: const Icon(Icons.link),
         ),
@@ -594,17 +594,31 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
       _undo.record('Customer link could not be created.');
       return;
     }
-    final token = link.token;
-    _undo.offer(
-      'Customer status link created.',
-      () => _loans.revokeShareLink(link.id),
-    );
+    if (!link.reused) {
+      _undo.offer(
+        'Customer status link created.',
+        () => _loans.revokeShareLink(link.id),
+      );
+    }
+    await _showLinkDialog(link.token, reused: link.reused);
+  }
+
+  String _linkUrl(String token) {
     final base = AppConfig.publicAppUrl.isEmpty
         ? Uri.base
         : Uri.parse(AppConfig.publicAppUrl);
-    final url = base
+    return base
         .replace(path: '/s/$token', query: null, fragment: null)
         .toString();
+  }
+
+  Future<void> _copyLink(String token) async {
+    await Clipboard.setData(ClipboardData(text: _linkUrl(token)));
+    if (mounted) _undo.notify('Customer link copied.');
+  }
+
+  Future<void> _showLinkDialog(String token, {required bool reused}) async {
+    final url = _linkUrl(token);
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -615,8 +629,10 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text(
-                'Anyone with this link can view the sanitized loan status until you revoke it. Send it only to the borrower.',
+              Text(
+                '${reused ? 'This loan already has a link; here it is again. ' : ''}'
+                'Anyone with this link can see this loan\'s status until you '
+                'revoke it. Send it only to the borrower.',
               ),
               const SizedBox(height: 12),
               SelectableText(url),
@@ -630,11 +646,8 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
           ),
           FilledButton.icon(
             onPressed: () async {
-              await Clipboard.setData(ClipboardData(text: url));
               if (dialogContext.mounted) Navigator.pop(dialogContext);
-              if (mounted) {
-                _undo.notify('Customer link copied.');
-              }
+              await _copyLink(token);
             },
             icon: const Icon(Icons.copy),
             label: const Text('Copy Link'),
@@ -671,22 +684,33 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
                           link.isActive ? 'Active link' : 'Inactive link',
                         ),
                         subtitle: Text(
-                          'Created ${formatPhilippineDateTime(link.createdAt.toLocal())}',
+                          'Created ${formatPhilippineDateTime(link.createdAt.toLocal())}'
+                          '${link.isActive && !link.canCopy ? '\nOlder link: still works, but it cannot be copied. Revoke it and use Get Link for one you can copy.' : ''}',
                         ),
-                        isThreeLine: false,
+                        isThreeLine: link.isActive && !link.canCopy,
                         trailing: link.isActive
-                            ? TextButton(
-                                onPressed: () async {
-                                  final revoked = await controller
-                                      .revokeShareLink(link.id);
-                                  if (revoked) {
-                                    links = await controller.fetchShareLinks(
-                                      loan.summary.id,
-                                    );
-                                    setDialogState(() {});
-                                  }
-                                },
-                                child: const Text('Revoke'),
+                            ? Wrap(
+                                spacing: 4,
+                                children: [
+                                  if (link.canCopy)
+                                    TextButton.icon(
+                                      onPressed: () => _copyLink(link.token!),
+                                      icon: const Icon(Icons.copy, size: 18),
+                                      label: const Text('Copy'),
+                                    ),
+                                  TextButton(
+                                    onPressed: () async {
+                                      final revoked = await controller
+                                          .revokeShareLink(link.id);
+                                      if (revoked) {
+                                        links = await controller
+                                            .fetchShareLinks(loan.summary.id);
+                                        setDialogState(() {});
+                                      }
+                                    },
+                                    child: const Text('Revoke'),
+                                  ),
+                                ],
                               )
                             : null,
                       );
@@ -1156,7 +1180,7 @@ class _LoanDocuments extends StatelessWidget {
           leading: const Icon(Icons.link),
           title: const Text('Customer status link'),
           subtitle: const Text(
-            'Create or revoke a secure read-only loan status link.',
+            'Get, copy, or revoke the read-only status link for the borrower.',
           ),
           trailing: Wrap(
             spacing: 8,
@@ -1167,7 +1191,7 @@ class _LoanDocuments extends StatelessWidget {
               ),
               FilledButton(
                 onPressed: onCreateLink,
-                child: const Text('Create Link'),
+                child: const Text('Get Link'),
               ),
             ],
           ),

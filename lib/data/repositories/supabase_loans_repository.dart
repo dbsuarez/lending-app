@@ -149,9 +149,8 @@ class SupabaseLoansRepository {
     );
   }
 
-  Future<({String id, String token})> createShareLink({
-    required String loanId,
-  }) async {
+  /// Returns the loan's active link, creating one only if none exists.
+  Future<CustomerLink> createShareLink({required String loanId}) async {
     final result = Map<String, dynamic>.from(
       await _client.rpc(
             'create_loan_share_link',
@@ -162,13 +161,17 @@ class SupabaseLoansRepository {
           )
           as Map,
     );
-    return (id: result['id'] as String, token: result['token'] as String);
+    return (
+      id: result['id'] as String,
+      token: result['token'] as String,
+      reused: result['reused'] as bool? ?? false,
+    );
   }
 
   Future<List<LoanShareLinkSummary>> fetchShareLinks(String loanId) async {
     final rows = await _client
         .from('loan_share_links')
-        .select('id, created_at, revoked_at, last_accessed_at')
+        .select('id, created_at, revoked_at, last_accessed_at, token')
         .eq('loan_id', loanId)
         .order('created_at', ascending: false);
     return [
@@ -182,6 +185,7 @@ class SupabaseLoansRepository {
           lastAccessedAt: row['last_accessed_at'] == null
               ? null
               : DateTime.parse(row['last_accessed_at'] as String),
+          token: row['token'] as String?,
         ),
     ];
   }

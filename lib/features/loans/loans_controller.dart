@@ -16,6 +16,7 @@ class LoansController extends AsyncNotifier<List<LoanSummary>> {
   SupabaseLoansRepository? _repository;
   final List<LoanSummary> _localLoans = [];
   final Map<String, LoanQuote> _localQuotes = {};
+  final Set<String> _demoLinks = {};
 
   bool get isLive =>
       AppConfig.hasSupabase &&
@@ -132,8 +133,17 @@ class LoansController extends AsyncNotifier<List<LoanSummary>> {
     }
   }
 
-  Future<({String id, String token})?> createShareLink(String loanId) async {
-    if (!isLive) return (id: 'local-demo-$loanId', token: 'local-demo-$loanId');
+  /// The loan's customer link (existing one reused; created if none).
+  Future<CustomerLink?> createShareLink(String loanId) async {
+    if (!isLive) {
+      final reused = _demoLinks.contains(loanId);
+      _demoLinks.add(loanId);
+      return (
+        id: 'local-demo-$loanId',
+        token: 'local-demo-$loanId',
+        reused: reused,
+      );
+    }
     try {
       return await _repository!.createShareLink(loanId: loanId);
     } catch (_) {
