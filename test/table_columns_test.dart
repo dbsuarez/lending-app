@@ -83,7 +83,7 @@ void main() {
       ),
     );
     expect(find.text('0917'), findsOneWidget);
-    await tester.tap(find.byTooltip('Show, hide or resize columns'));
+    await tester.tap(find.byTooltip('Customize columns'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(CheckboxMenuButton, 'Phone'));
     await tester.pumpAndSettle();

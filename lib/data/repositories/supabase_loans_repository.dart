@@ -101,8 +101,21 @@ class SupabaseLoansRepository {
     // payment id -> sequence -> amount applied, to place each payment on the
     // installment it paid the most of.
     final appliedByPayment = <String, Map<int, int>>{};
+    // payment id -> sequence -> (interest, principal), for explanations.
+    final splitByPayment = <String, Map<int, (int, int)>>{};
     for (final allocation in allocationRows) {
       final sequence = (allocation['installment'] as Map)['sequence'] as int;
+      final split = splitByPayment.putIfAbsent(
+        allocation['payment_id'] as String,
+        () => {},
+      );
+      final before = split[sequence] ?? (0, 0);
+      split[sequence] = (
+        before.$1 +
+            (allocation['interest_centavos'] as int) +
+            (allocation['penalty_centavos'] as int),
+        before.$2 + (allocation['principal_centavos'] as int),
+      );
       final share =
           (allocation['principal_centavos'] as int) +
           (allocation['interest_centavos'] as int) +
@@ -136,6 +149,18 @@ class SupabaseLoansRepository {
               appliedSequence: _largestShare(
                 appliedByPayment[payment['id'] as String],
               ),
+              allocations: [
+                for (final entry
+                    in (splitByPayment[payment['id'] as String]?.entries
+                              .toList() ??
+                          const <MapEntry<int, (int, int)>>[])
+                      ..sort((a, b) => a.key.compareTo(b.key)))
+                  AllocationShare(
+                    sequence: entry.key,
+                    interestCentavos: entry.value.$1,
+                    principalCentavos: entry.value.$2,
+                  ),
+              ],
             ),
       ],
       installments: [

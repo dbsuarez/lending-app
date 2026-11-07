@@ -14,6 +14,7 @@ import '../../core/undo/undo_controller.dart';
 import '../documents/loan_print_menu.dart';
 import '../settings/operations_config_provider.dart';
 import 'extension_preview_dialog.dart';
+import 'ledger_explanation_dialog.dart';
 import 'loans_controller.dart';
 
 class LoanDetailScreen extends ConsumerStatefulWidget {
@@ -377,6 +378,11 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
               : Icons.person_outline,
           loan.summary.isPersonal ? 'Move to Business' : 'Mark Personal',
           () => _setPersonal(loan),
+        ),
+        item(
+          Icons.chat_outlined,
+          'Explain payments',
+          () => LedgerExplanationDialog.show(context, loan),
         ),
         const Divider(height: 1),
         item(
@@ -990,6 +996,11 @@ class _PaymentLedger extends StatelessWidget {
                 'applied',
               ),
               Text('Balance: ${formatPeso(loan.outstandingCentavos)}'),
+              FilledButton.tonalIcon(
+                onPressed: () => LedgerExplanationDialog.show(context, loan),
+                icon: const Icon(Icons.chat_outlined, size: 18),
+                label: const Text('Explain'),
+              ),
             ],
           ),
           const SizedBox(height: 12),

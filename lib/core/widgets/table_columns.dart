@@ -116,6 +116,7 @@ class ColumnView {
               placeholder: all[i].placeholder,
               showEditIcon: all[i].showEditIcon,
             ),
+    const DataCell(SizedBox.shrink()),
   ];
 
   /// Visible columns with a resize handle; sort callbacks still receive the
@@ -135,6 +136,8 @@ class ColumnView {
             ? null
             : (_, ascending) => all[i].onSort!(i, ascending),
       ),
+    // Space for the "Customize columns" button in the header row.
+    const DataColumn(label: SizedBox(width: _buttonSpace)),
   ];
 
   /// Maps the screen's sort column (original index) to the visible index.
@@ -144,6 +147,8 @@ class ColumnView {
     return at < 0 ? null : at;
   }
 }
+
+const _buttonSpace = 28.0;
 
 /// Header content plus a thin drag handle on its right edge.
 class _ResizableHeader extends StatefulWidget {
@@ -247,11 +252,14 @@ class ColumnToggle extends ConsumerWidget {
       onResizeEnd: prefs.saveWidths,
     );
     return Stack(
+      // Passthrough: the table keeps the width it had before being wrapped.
+      fit: StackFit.passthrough,
       children: [
         builder(view),
         Positioned(
-          top: 6,
-          right: 6,
+          // Inside the card, at the right end of the header row.
+          top: 10,
+          right: 10,
           child: MenuAnchor(
             menuChildren: [
               for (var i = 0; i < labels.length; i++)
@@ -286,7 +294,7 @@ class ColumnToggle extends ConsumerWidget {
               shape: const CircleBorder(),
               elevation: 2,
               child: IconButton(
-                tooltip: 'Show, hide or resize columns',
+                tooltip: 'Customize columns',
                 visualDensity: VisualDensity.compact,
                 iconSize: 18,
                 onPressed: () =>

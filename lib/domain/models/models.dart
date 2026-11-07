@@ -107,6 +107,17 @@ class LoanSummary {
   );
 }
 
+/// The part of one payment credited to one installment.
+class AllocationShare {
+  const AllocationShare({
+    required this.sequence,
+    required this.interestCentavos,
+    required this.principalCentavos,
+  });
+  final int sequence, interestCentavos, principalCentavos;
+  int get totalCentavos => interestCentavos + principalCentavos;
+}
+
 /// A verified payment as received from the borrower (before it is split
 /// across installments).
 class ReceivedPayment {
@@ -114,7 +125,11 @@ class ReceivedPayment {
     required this.amountCentavos,
     required this.receivedAt,
     this.appliedSequence,
+    this.allocations = const [],
   });
+
+  /// How this payment was split across installments, in sequence order.
+  final List<AllocationShare> allocations;
   final int amountCentavos;
   final DateTime receivedAt;
 
