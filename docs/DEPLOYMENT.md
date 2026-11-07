@@ -90,4 +90,5 @@ Treat the database password as an ephemeral secret: retrieve it from the owner
 or an approved secret store, do not commit it, and do not paste it into logs or
 handoff documents. Migration `202611070032_personal_loans.sql` has already been
 applied to production; the corresponding Flutter UI was deployed to the web in
-build `20261107_1911`.
+build `20261107_1911`. Migration `202611070033_transaction_undo.sql` (undo)
+was applied on 2026-11-07 and web build `20261107_2133` deployed after it.
