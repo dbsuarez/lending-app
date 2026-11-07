@@ -466,15 +466,20 @@ class _Brand extends StatelessWidget {
       const SizedBox(width: 9),
       SizedBox(
         width: 125,
-        child: Text(
-          name,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: dark ? Colors.white : AppColors.navy900,
-            fontSize: 18,
-            height: 1.02,
-            fontWeight: FontWeight.w800,
+        // One line, never cut off: long names shrink to fit instead.
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            name,
+            maxLines: 1,
+            softWrap: false,
+            style: TextStyle(
+              color: dark ? Colors.white : AppColors.navy900,
+              fontSize: 18,
+              height: 1.02,
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ),
       ),
