@@ -55,4 +55,5 @@ npx supabase db push --yes --db-url "postgresql://postgres.bfrifjiqqlziejocleax:
 Treat the database password as an ephemeral secret: retrieve it from the owner
 or an approved secret store, do not commit it, and do not paste it into logs or
 handoff documents. Migration `202611070032_personal_loans.sql` has already been
-applied to production; the corresponding Flutter UI has not yet been deployed.
+applied to production; the corresponding Flutter UI was deployed to the web in
+build `20261107_1911`.
