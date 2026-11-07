@@ -28,6 +28,19 @@ development credential key or value is found under `build/web`:
 powershell -ExecutionPolicy Bypass -File tool/build_web.ps1
 ```
 
+## Android APK
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tool/build_apk.ps1 -Install
+```
+
+Builds a release APK (arm64) with the same public-only defines, scans the
+compiled snapshot for dev credentials, and replaces the app on the connected
+phone with `adb install -r` (keeps app data; stops instead of uninstalling if
+signatures differ). The main `AndroidManifest.xml` must declare `INTERNET`:
+the Flutter template only declares it for debug/profile, so a release build
+without it shows "could not be loaded" everywhere.
+
 ## Customer status page
 
 Customer status links (`/s/<token>`) are served by `web/status.html`, a
