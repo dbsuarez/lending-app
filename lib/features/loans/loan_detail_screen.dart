@@ -774,17 +774,80 @@ class _Overview extends StatelessWidget {
         ],
       ),
       const SizedBox(height: 20),
-      const Card(
+      Card(
         child: ListTile(
-          leading: Icon(Icons.info_outline),
-          title: Text('Financial state'),
-          subtitle: Text(
-            'No money has been released for this draft yet. Confirm & Disburse records that you released the money, and locks the agreed terms as an active loan.',
+          leading: Icon(
+            _stateIcon(loan),
+            color: _overdueCount(loan) > 0
+                ? Theme.of(context).colorScheme.error
+                : null,
           ),
+          title: const Text('Financial state'),
+          subtitle: Text(financialStateText(loan)),
         ),
       ),
     ],
   );
+
+  static IconData _stateIcon(LoanDetail loan) => switch (loan.summary.status) {
+    'active' when _overdueCount(loan) > 0 => Icons.warning_amber_rounded,
+    'active' => Icons.payments_outlined,
+    'fully_paid' => Icons.check_circle_outline,
+    'cancelled' => Icons.block,
+    'refinanced' => Icons.autorenew,
+    _ => Icons.info_outline,
+  };
+}
+
+int _overdueCount(LoanDetail loan, {DateTime? today}) {
+  final now = today ?? DateTime.now();
+  final day = DateTime(now.year, now.month, now.day);
+  return loan.installments
+      .where(
+        (i) => i.paidCentavos < i.amountCentavos && i.dueDate.isBefore(day),
+      )
+      .length;
+}
+
+/// Plain-language summary of where the loan stands, by status.
+@visibleForTesting
+String financialStateText(LoanDetail loan, {DateTime? today}) {
+  final summary = loan.summary;
+  switch (summary.status) {
+    case 'draft':
+      return 'No money has been released for this draft yet. Confirm & '
+          'Disburse records that you released the money, and locks the '
+          'agreed terms as an active loan.';
+    case 'cancelled':
+      return 'This draft was cancelled before any money was released. '
+          'Nothing is owed.';
+    case 'refinanced':
+      return 'This loan was closed and replaced by a refinanced loan. See the '
+          'new loan for what is owed now.';
+    case 'fully_paid':
+      final paidOn = summary.paidOn;
+      return 'Fully paid${paidOn == null ? '' : ' on ${formatPhilippineDate(paidOn)}'}. '
+          'Nothing is owed.';
+  }
+  final released = summary.borrowedOn == null
+      ? 'Money released.'
+      : 'Money released on ${formatPhilippineDate(summary.borrowedOn!)}.';
+  final paid =
+      ' ${formatPeso(loan.paidCentavos)} paid so far; '
+      '${formatPeso(loan.outstandingCentavos)} still owed.';
+  final unpaid = [...loan.installments]
+    ..retainWhere((i) => i.paidCentavos < i.amountCentavos)
+    ..sort((a, b) => a.dueDate.compareTo(b.dueDate));
+  final overdue = _overdueCount(loan, today: today);
+  final next = unpaid.isEmpty
+      ? ''
+      : ' Next due: ${formatPeso(unpaid.first.amountCentavos - unpaid.first.paidCentavos)} '
+            'on ${formatPhilippineDate(unpaid.first.dueDate)}.';
+  final late = overdue == 0
+      ? ''
+      : ' $overdue ${overdue == 1 ? 'installment is' : 'installments are'} '
+            'past due.';
+  return '$released$paid$next$late';
 }
 
 class _PaymentLedger extends StatelessWidget {
