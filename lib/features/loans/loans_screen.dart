@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/widgets/table_columns.dart';
 import '../../core/preferences/filter_defaults.dart';
 import '../../core/formatting.dart';
 import '../../core/widgets/responsive_card_list.dart';
@@ -202,32 +203,44 @@ class _LoansScreenState extends ConsumerState<LoansScreen> {
                 ),
               ),
             )
-          : Card(
-              clipBehavior: Clip.antiAlias,
-              child: SingleChildScrollView(
-                child: DataTable(
-                  // Rows open on tap; there is nothing to select, so no checkboxes.
-                  showCheckboxColumn: false,
-                  sortColumnIndex: sortColumnIndex,
-                  sortAscending: sortAscending,
-                  columns: [
-                    DataColumn(label: const Text('Reference'), onSort: _sort),
-                    DataColumn(label: const Text('Borrower'), onSort: _sort),
-                    DataColumn(label: const Text('Borrowed'), onSort: _sort),
-                    DataColumn(label: const Text('Paid'), onSort: _sort),
-                    DataColumn(
-                      label: const Text('Principal'),
-                      numeric: true,
-                      onSort: _sort,
-                    ),
-                    DataColumn(
-                      label: const Text('Total'),
-                      numeric: true,
-                      onSort: _sort,
-                    ),
-                    DataColumn(label: const Text('Status'), onSort: _sort),
-                  ],
-                  rows: [for (final loan in loans) _row(context, loan)],
+          : ColumnToggle(
+              tableId: 'loans',
+              labels: const [
+                'Reference',
+                'Borrower',
+                'Borrowed',
+                'Paid',
+                'Principal',
+                'Total',
+                'Status',
+              ],
+              builder: (view) => Card(
+                clipBehavior: Clip.antiAlias,
+                child: SingleChildScrollView(
+                  child: DataTable(
+                    // Rows open on tap; there is nothing to select, so no checkboxes.
+                    showCheckboxColumn: false,
+                    sortColumnIndex: view.sortIndex(sortColumnIndex),
+                    sortAscending: sortAscending,
+                    columns: view.columns([
+                      DataColumn(label: const Text('Reference'), onSort: _sort),
+                      DataColumn(label: const Text('Borrower'), onSort: _sort),
+                      DataColumn(label: const Text('Borrowed'), onSort: _sort),
+                      DataColumn(label: const Text('Paid'), onSort: _sort),
+                      DataColumn(
+                        label: const Text('Principal'),
+                        numeric: true,
+                        onSort: _sort,
+                      ),
+                      DataColumn(
+                        label: const Text('Total'),
+                        numeric: true,
+                        onSort: _sort,
+                      ),
+                      DataColumn(label: const Text('Status'), onSort: _sort),
+                    ]),
+                    rows: [for (final loan in loans) _row(context, loan, view)],
+                  ),
                 ),
               ),
             ),
@@ -239,11 +252,15 @@ class _LoansScreenState extends ConsumerState<LoansScreen> {
     sortAscending = ascending;
   });
 
-  DataRow _row(BuildContext context, LoanSummary loan) => DataRow(
+  DataRow _row(
+    BuildContext context,
+    LoanSummary loan,
+    ColumnView view,
+  ) => DataRow(
     onSelectChanged: (_) => context.go(
       '/loans/${loan.id}?from=${widget.personalOnly ? 'personal' : 'loans'}',
     ),
-    cells: [
+    cells: view.cells([
       DataCell(Text(_reference(loan.id))),
       DataCell(Text(loan.borrowerName)),
       DataCell(Text(_borrowedLabel(loan))),
@@ -251,7 +268,7 @@ class _LoansScreenState extends ConsumerState<LoansScreen> {
       DataCell(Text(formatPeso(loan.principalCentavos))),
       DataCell(Text(formatPeso(loan.totalCentavos))),
       DataCell(AppStatusBadge(loan.status)),
-    ],
+    ]),
   );
 }
 

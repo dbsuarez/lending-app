@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../core/widgets/table_columns.dart';
 import '../../core/preferences/filter_defaults.dart';
 import '../../core/undo/undo_controller.dart';
 import '../../core/formatting.dart';
@@ -109,53 +110,63 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
                 onPrint: (document) => _print(items[index], document),
               ),
             )
-          : Card(
-              clipBehavior: Clip.antiAlias,
-              child: SingleChildScrollView(
-                child: DataTable(
-                  sortColumnIndex: sortColumnIndex,
-                  sortAscending: sortAscending,
-                  columns: [
-                    DataColumn(label: const Text('Reference'), onSort: _sort),
-                    DataColumn(label: const Text('Borrower'), onSort: _sort),
-                    DataColumn(
-                      label: const Text('Total'),
-                      numeric: true,
-                      onSort: _sort,
-                    ),
-                    DataColumn(label: const Text('Status'), onSort: _sort),
-                    const DataColumn(label: Text('Actions')),
-                  ],
-                  rows: [
-                    for (final loan in items)
-                      DataRow(
-                        cells: [
-                          DataCell(Text(_reference(loan.id))),
-                          DataCell(Text(loan.borrowerName)),
-                          DataCell(Text(formatPeso(loan.totalCentavos))),
-                          DataCell(AppStatusBadge(loan.status)),
-                          DataCell(
-                            Wrap(
-                              spacing: 8,
-                              children: [
-                                OutlinedButton.icon(
-                                  onPressed: () =>
-                                      _manageEvidence(context, loan),
-                                  icon: const Icon(Icons.attach_file),
-                                  label: const Text('Evidence'),
-                                ),
-                                LoanPrintMenu(
-                                  filled: true,
-                                  loadLoan: () => ref
-                                      .read(loansControllerProvider.notifier)
-                                      .fetchDetail(loan.id),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
+          : ColumnToggle(
+              tableId: 'documents',
+              labels: const [
+                'Reference',
+                'Borrower',
+                'Total',
+                'Status',
+                'Actions',
+              ],
+              builder: (view) => Card(
+                clipBehavior: Clip.antiAlias,
+                child: SingleChildScrollView(
+                  child: DataTable(
+                    sortColumnIndex: view.sortIndex(sortColumnIndex),
+                    sortAscending: sortAscending,
+                    columns: view.columns([
+                      DataColumn(label: const Text('Reference'), onSort: _sort),
+                      DataColumn(label: const Text('Borrower'), onSort: _sort),
+                      DataColumn(
+                        label: const Text('Total'),
+                        numeric: true,
+                        onSort: _sort,
                       ),
-                  ],
+                      DataColumn(label: const Text('Status'), onSort: _sort),
+                      const DataColumn(label: Text('Actions')),
+                    ]),
+                    rows: [
+                      for (final loan in items)
+                        DataRow(
+                          cells: view.cells([
+                            DataCell(Text(_reference(loan.id))),
+                            DataCell(Text(loan.borrowerName)),
+                            DataCell(Text(formatPeso(loan.totalCentavos))),
+                            DataCell(AppStatusBadge(loan.status)),
+                            DataCell(
+                              Wrap(
+                                spacing: 8,
+                                children: [
+                                  OutlinedButton.icon(
+                                    onPressed: () =>
+                                        _manageEvidence(context, loan),
+                                    icon: const Icon(Icons.attach_file),
+                                    label: const Text('Evidence'),
+                                  ),
+                                  LoanPrintMenu(
+                                    filled: true,
+                                    loadLoan: () => ref
+                                        .read(loansControllerProvider.notifier)
+                                        .fetchDetail(loan.id),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ]),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),

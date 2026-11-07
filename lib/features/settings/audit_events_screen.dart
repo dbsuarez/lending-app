@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/widgets/table_columns.dart';
 import '../../core/config/app_config.dart';
 import '../../core/formatting.dart';
 import '../../core/widgets/responsive_card_list.dart';
@@ -104,49 +105,59 @@ class _AuditEventsScreenState extends State<AuditEventsScreen> {
                         itemCount: items.length,
                         itemBuilder: (_, index) => _AuditCard(items[index]),
                       )
-                    : Card(
-                        clipBehavior: Clip.antiAlias,
-                        child: SingleChildScrollView(
-                          child: DataTable(
-                            sortColumnIndex: sortColumnIndex,
-                            sortAscending: sortAscending,
-                            columns: [
-                              DataColumn(
-                                label: const Text('Date and time'),
-                                onSort: _sort,
-                              ),
-                              DataColumn(
-                                label: const Text('Action'),
-                                onSort: _sort,
-                              ),
-                              DataColumn(
-                                label: const Text('Record type'),
-                                onSort: _sort,
-                              ),
-                              DataColumn(
-                                label: const Text('Record ID'),
-                                onSort: _sort,
-                              ),
-                              const DataColumn(label: Text('Details')),
-                            ],
-                            rows: [
-                              for (final event in items)
-                                DataRow(
-                                  cells: [
-                                    DataCell(
-                                      Text(
-                                        formatPhilippineDateTime(
-                                          event.createdAt,
+                    : ColumnToggle(
+                        tableId: 'audit',
+                        labels: const [
+                          'Date and time',
+                          'Action',
+                          'Record type',
+                          'Record ID',
+                          'Details',
+                        ],
+                        builder: (view) => Card(
+                          clipBehavior: Clip.antiAlias,
+                          child: SingleChildScrollView(
+                            child: DataTable(
+                              sortColumnIndex: view.sortIndex(sortColumnIndex),
+                              sortAscending: sortAscending,
+                              columns: view.columns([
+                                DataColumn(
+                                  label: const Text('Date and time'),
+                                  onSort: _sort,
+                                ),
+                                DataColumn(
+                                  label: const Text('Action'),
+                                  onSort: _sort,
+                                ),
+                                DataColumn(
+                                  label: const Text('Record type'),
+                                  onSort: _sort,
+                                ),
+                                DataColumn(
+                                  label: const Text('Record ID'),
+                                  onSort: _sort,
+                                ),
+                                const DataColumn(label: Text('Details')),
+                              ]),
+                              rows: [
+                                for (final event in items)
+                                  DataRow(
+                                    cells: view.cells([
+                                      DataCell(
+                                        Text(
+                                          formatPhilippineDateTime(
+                                            event.createdAt,
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                    DataCell(Text(_eventLabel(event.action))),
-                                    DataCell(Text(event.recordType)),
-                                    DataCell(SelectableText(event.recordId)),
-                                    DataCell(_PayloadDetails(event.payload)),
-                                  ],
-                                ),
-                            ],
+                                      DataCell(Text(_eventLabel(event.action))),
+                                      DataCell(Text(event.recordType)),
+                                      DataCell(SelectableText(event.recordId)),
+                                      DataCell(_PayloadDetails(event.payload)),
+                                    ]),
+                                  ),
+                              ],
+                            ),
                           ),
                         ),
                       ),

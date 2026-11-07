@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/widgets/table_columns.dart';
 import '../../core/preferences/filter_defaults.dart';
 import '../../core/widgets/info_tip.dart';
 import '../../core/formatting.dart';
@@ -222,58 +223,72 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
                 onReverse: () => _reverse(payments[index]),
               ),
             )
-          : Card(
-              clipBehavior: Clip.antiAlias,
-              child: SingleChildScrollView(
-                child: DataTable(
-                  // Checkboxes only when there is something to bulk-verify.
-                  showCheckboxColumn: pending.isNotEmpty,
-                  onSelectAll: (on) => setState(() {
-                    for (final p in pending) {
-                      on == true ? selected.add(p.id) : selected.remove(p.id);
-                    }
-                  }),
-                  sortColumnIndex: sortColumnIndex,
-                  sortAscending: sortAscending,
-                  columns: [
-                    DataColumn(label: const Text('Received'), onSort: _sort),
-                    DataColumn(label: const Text('Borrower'), onSort: _sort),
-                    DataColumn(
-                      label: const Text('Amount'),
-                      numeric: true,
-                      onSort: _sort,
-                    ),
-                    DataColumn(label: const Text('Method'), onSort: _sort),
-                    DataColumn(label: const Text('Reference'), onSort: _sort),
-                    DataColumn(label: const Text('Status'), onSort: _sort),
-                    const DataColumn(label: Text('Actions')),
-                  ],
-                  rows: [
-                    for (final payment in payments)
-                      DataRow(
-                        selected: selected.contains(payment.id),
-                        onSelectChanged: payment.status == 'pending'
-                            ? (on) => toggle(payment, on ?? false)
-                            : null,
-                        cells: [
-                          DataCell(
-                            Text(formatPhilippineDateTime(payment.receivedAt)),
-                          ),
-                          DataCell(Text(payment.borrowerName)),
-                          DataCell(Text(formatPeso(payment.amountCentavos))),
-                          DataCell(Text(payment.method)),
-                          DataCell(
-                            Text(
-                              payment.reference.isEmpty
-                                  ? '—'
-                                  : payment.reference,
-                            ),
-                          ),
-                          DataCell(AppStatusBadge(payment.status)),
-                          DataCell(_paymentActions(payment)),
-                        ],
+          : ColumnToggle(
+              tableId: 'payments',
+              labels: const [
+                'Received',
+                'Borrower',
+                'Amount',
+                'Method',
+                'Reference',
+                'Status',
+                'Actions',
+              ],
+              builder: (view) => Card(
+                clipBehavior: Clip.antiAlias,
+                child: SingleChildScrollView(
+                  child: DataTable(
+                    // Checkboxes only when there is something to bulk-verify.
+                    showCheckboxColumn: pending.isNotEmpty,
+                    onSelectAll: (on) => setState(() {
+                      for (final p in pending) {
+                        on == true ? selected.add(p.id) : selected.remove(p.id);
+                      }
+                    }),
+                    sortColumnIndex: view.sortIndex(sortColumnIndex),
+                    sortAscending: sortAscending,
+                    columns: view.columns([
+                      DataColumn(label: const Text('Received'), onSort: _sort),
+                      DataColumn(label: const Text('Borrower'), onSort: _sort),
+                      DataColumn(
+                        label: const Text('Amount'),
+                        numeric: true,
+                        onSort: _sort,
                       ),
-                  ],
+                      DataColumn(label: const Text('Method'), onSort: _sort),
+                      DataColumn(label: const Text('Reference'), onSort: _sort),
+                      DataColumn(label: const Text('Status'), onSort: _sort),
+                      const DataColumn(label: Text('Actions')),
+                    ]),
+                    rows: [
+                      for (final payment in payments)
+                        DataRow(
+                          selected: selected.contains(payment.id),
+                          onSelectChanged: payment.status == 'pending'
+                              ? (on) => toggle(payment, on ?? false)
+                              : null,
+                          cells: view.cells([
+                            DataCell(
+                              Text(
+                                formatPhilippineDateTime(payment.receivedAt),
+                              ),
+                            ),
+                            DataCell(Text(payment.borrowerName)),
+                            DataCell(Text(formatPeso(payment.amountCentavos))),
+                            DataCell(Text(payment.method)),
+                            DataCell(
+                              Text(
+                                payment.reference.isEmpty
+                                    ? '—'
+                                    : payment.reference,
+                              ),
+                            ),
+                            DataCell(AppStatusBadge(payment.status)),
+                            DataCell(_paymentActions(payment)),
+                          ]),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),

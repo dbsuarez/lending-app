@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/widgets/table_columns.dart';
 import '../../core/widgets/info_tip.dart';
 import '../../core/config/app_config.dart';
 import '../../core/formatting.dart';
@@ -1043,60 +1044,80 @@ class _PaymentLedger extends StatelessWidget {
                 ),
               )
           else
-            Card(
-              clipBehavior: Clip.antiAlias,
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: DataTable(
-                  columns: [
-                    const DataColumn(label: Text('No.')),
-                    const DataColumn(label: Text('Due Date')),
-                    const DataColumn(label: Text('Amount Due'), numeric: true),
-                    DataColumn(
-                      label: _labelWithInfo('Received', 'received'),
-                      numeric: true,
-                    ),
-                    const DataColumn(label: Text('Payment Date')),
-                    DataColumn(
-                      label: _labelWithInfo('Applied', 'applied'),
-                      numeric: true,
-                    ),
-                    const DataColumn(
-                      label: Text('Ending Balance'),
-                      numeric: true,
-                    ),
-                    const DataColumn(label: Text('Status')),
-                  ],
-                  rows: [
-                    for (final row in rows)
-                      DataRow(
-                        cells: [
-                          DataCell(Text('${row.installment.sequence}')),
-                          DataCell(
-                            Text(formatPhilippineDate(row.installment.dueDate)),
-                          ),
-                          DataCell(
-                            Text(formatPeso(row.installment.amountCentavos)),
-                          ),
-                          DataCell(
-                            Text(
-                              row.received.isEmpty
-                                  ? '—'
-                                  : formatPeso(row.receivedCentavos),
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
+            ColumnToggle(
+              tableId: 'ledger',
+              labels: const [
+                'No.',
+                'Due Date',
+                'Amount Due',
+                'Received',
+                'Payment Date',
+                'Applied',
+                'Ending Balance',
+                'Status',
+              ],
+              builder: (view) => Card(
+                clipBehavior: Clip.antiAlias,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: DataTable(
+                    columns: view.columns([
+                      const DataColumn(label: Text('No.')),
+                      const DataColumn(label: Text('Due Date')),
+                      const DataColumn(
+                        label: Text('Amount Due'),
+                        numeric: true,
+                      ),
+                      DataColumn(
+                        label: _labelWithInfo('Received', 'received'),
+                        numeric: true,
+                      ),
+                      const DataColumn(label: Text('Payment Date')),
+                      DataColumn(
+                        label: _labelWithInfo('Applied', 'applied'),
+                        numeric: true,
+                      ),
+                      const DataColumn(
+                        label: Text('Ending Balance'),
+                        numeric: true,
+                      ),
+                      const DataColumn(label: Text('Status')),
+                    ]),
+                    rows: [
+                      for (final row in rows)
+                        DataRow(
+                          cells: view.cells([
+                            DataCell(Text('${row.installment.sequence}')),
+                            DataCell(
+                              Text(
+                                formatPhilippineDate(row.installment.dueDate),
                               ),
                             ),
-                          ),
-                          DataCell(Text(dates(row))),
-                          DataCell(
-                            Text(formatPeso(row.installment.paidCentavos)),
-                          ),
-                          DataCell(Text(formatPeso(row.endingBalanceCentavos))),
-                          DataCell(AppStatusBadge(row.status)),
-                        ],
-                      ),
-                  ],
+                            DataCell(
+                              Text(formatPeso(row.installment.amountCentavos)),
+                            ),
+                            DataCell(
+                              Text(
+                                row.received.isEmpty
+                                    ? '—'
+                                    : formatPeso(row.receivedCentavos),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            DataCell(Text(dates(row))),
+                            DataCell(
+                              Text(formatPeso(row.installment.paidCentavos)),
+                            ),
+                            DataCell(
+                              Text(formatPeso(row.endingBalanceCentavos)),
+                            ),
+                            DataCell(AppStatusBadge(row.status)),
+                          ]),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -1193,46 +1214,56 @@ class _ScheduleState extends State<_Schedule> {
             )
           : SingleChildScrollView(
               padding: const EdgeInsets.all(24),
-              child: Card(
-                clipBehavior: Clip.antiAlias,
-                child: DataTable(
-                  sortColumnIndex: sortColumnIndex,
-                  sortAscending: sortAscending,
-                  columns: [
-                    DataColumn(
-                      label: const Text('#'),
-                      numeric: true,
-                      onSort: _sort,
-                    ),
-                    DataColumn(label: const Text('Due date'), onSort: _sort),
-                    DataColumn(
-                      label: const Text('Principal'),
-                      numeric: true,
-                      onSort: _sort,
-                    ),
-                    DataColumn(
-                      label: const Text('Interest'),
-                      numeric: true,
-                      onSort: _sort,
-                    ),
-                    DataColumn(
-                      label: const Text('Scheduled'),
-                      numeric: true,
-                      onSort: _sort,
-                    ),
-                  ],
-                  rows: [
-                    for (final item in installments)
-                      DataRow(
-                        cells: [
-                          DataCell(Text('${item.sequence}')),
-                          DataCell(Text(formatPhilippineDate(item.dueDate))),
-                          DataCell(Text(formatPeso(item.principalCentavos))),
-                          DataCell(Text(formatPeso(item.interestCentavos))),
-                          DataCell(Text(formatPeso(item.amountCentavos))),
-                        ],
+              child: ColumnToggle(
+                tableId: 'schedule',
+                labels: const [
+                  '#',
+                  'Due date',
+                  'Principal',
+                  'Interest',
+                  'Scheduled',
+                ],
+                builder: (view) => Card(
+                  clipBehavior: Clip.antiAlias,
+                  child: DataTable(
+                    sortColumnIndex: view.sortIndex(sortColumnIndex),
+                    sortAscending: sortAscending,
+                    columns: view.columns([
+                      DataColumn(
+                        label: const Text('#'),
+                        numeric: true,
+                        onSort: _sort,
                       ),
-                  ],
+                      DataColumn(label: const Text('Due date'), onSort: _sort),
+                      DataColumn(
+                        label: const Text('Principal'),
+                        numeric: true,
+                        onSort: _sort,
+                      ),
+                      DataColumn(
+                        label: const Text('Interest'),
+                        numeric: true,
+                        onSort: _sort,
+                      ),
+                      DataColumn(
+                        label: const Text('Scheduled'),
+                        numeric: true,
+                        onSort: _sort,
+                      ),
+                    ]),
+                    rows: [
+                      for (final item in installments)
+                        DataRow(
+                          cells: view.cells([
+                            DataCell(Text('${item.sequence}')),
+                            DataCell(Text(formatPhilippineDate(item.dueDate))),
+                            DataCell(Text(formatPeso(item.principalCentavos))),
+                            DataCell(Text(formatPeso(item.interestCentavos))),
+                            DataCell(Text(formatPeso(item.amountCentavos))),
+                          ]),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/widgets/table_columns.dart';
 import '../../core/preferences/filter_defaults.dart';
 import '../../core/undo/undo_controller.dart';
 import '../../domain/models/models.dart';
@@ -180,72 +181,77 @@ class _BorrowersScreenState extends ConsumerState<BorrowersScreen> {
                 ),
               ),
             )
-          : Card(
-              clipBehavior: Clip.antiAlias,
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: DataTable(
-                  // Rows open on tap; there is nothing to select, so no checkboxes.
-                  showCheckboxColumn: false,
-                  sortColumnIndex: sortColumnIndex,
-                  sortAscending: sortAscending,
-                  columns: [
-                    DataColumn(label: const Text('Name'), onSort: _sort),
-                    DataColumn(label: const Text('Phone'), onSort: _sort),
-                    DataColumn(label: const Text('Email'), onSort: _sort),
-                    DataColumn(label: const Text('Address'), onSort: _sort),
-                    const DataColumn(
-                      label: SizedBox(width: 220, child: Text('Actions')),
-                    ),
-                  ],
-                  rows: [
-                    for (final borrower in borrowers)
-                      DataRow(
-                        onSelectChanged: (_) =>
-                            context.go('/borrowers/${borrower.id}'),
-                        cells: [
-                          DataCell(
-                            Row(
-                              children: [
-                                Flexible(child: Text(borrower.displayName)),
-                                if (activeBorrowerIds.contains(
-                                  borrower.id,
-                                )) ...[
-                                  const SizedBox(width: 8),
-                                  const _OngoingBadge(),
-                                ],
-                              ],
-                            ),
-                          ),
-                          DataCell(Text(_valueOrDash(borrower.phone))),
-                          DataCell(Text(_valueOrDash(borrower.email))),
-                          DataCell(Text(_valueOrDash(borrower.address))),
-                          DataCell(
-                            SizedBox(
-                              width: 220,
-                              child: Row(
-                                spacing: 4,
+          : ColumnToggle(
+              tableId: 'borrowers',
+              labels: const ['Name', 'Phone', 'Email', 'Address', 'Actions'],
+              builder: (view) => Card(
+                clipBehavior: Clip.antiAlias,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: DataTable(
+                    // Rows open on tap; there is nothing to select, so no checkboxes.
+                    showCheckboxColumn: false,
+                    sortColumnIndex: view.sortIndex(sortColumnIndex),
+                    sortAscending: sortAscending,
+                    columns: view.columns([
+                      DataColumn(label: const Text('Name'), onSort: _sort),
+                      DataColumn(label: const Text('Phone'), onSort: _sort),
+                      DataColumn(label: const Text('Email'), onSort: _sort),
+                      DataColumn(label: const Text('Address'), onSort: _sort),
+                      const DataColumn(
+                        label: SizedBox(width: 220, child: Text('Actions')),
+                      ),
+                    ]),
+                    rows: [
+                      for (final borrower in borrowers)
+                        DataRow(
+                          onSelectChanged: (_) =>
+                              context.go('/borrowers/${borrower.id}'),
+                          cells: view.cells([
+                            DataCell(
+                              Row(
                                 children: [
-                                  TextButton(
-                                    onPressed: () =>
-                                        context.go('/borrowers/${borrower.id}'),
-                                    child: const Text('View'),
-                                  ),
-                                  TextButton(
-                                    onPressed: () => _edit(context, borrower),
-                                    child: const Text('Edit'),
-                                  ),
-                                  TextButton(
-                                    onPressed: () => _archive(borrower),
-                                    child: const Text('Archive'),
-                                  ),
+                                  Flexible(child: Text(borrower.displayName)),
+                                  if (activeBorrowerIds.contains(
+                                    borrower.id,
+                                  )) ...[
+                                    const SizedBox(width: 8),
+                                    const _OngoingBadge(),
+                                  ],
                                 ],
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                  ],
+                            DataCell(Text(_valueOrDash(borrower.phone))),
+                            DataCell(Text(_valueOrDash(borrower.email))),
+                            DataCell(Text(_valueOrDash(borrower.address))),
+                            DataCell(
+                              SizedBox(
+                                width: 220,
+                                child: Row(
+                                  spacing: 4,
+                                  children: [
+                                    TextButton(
+                                      onPressed: () => context.go(
+                                        '/borrowers/${borrower.id}',
+                                      ),
+                                      child: const Text('View'),
+                                    ),
+                                    TextButton(
+                                      onPressed: () => _edit(context, borrower),
+                                      child: const Text('Edit'),
+                                    ),
+                                    TextButton(
+                                      onPressed: () => _archive(borrower),
+                                      child: const Text('Archive'),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ]),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
