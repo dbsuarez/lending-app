@@ -79,7 +79,9 @@ class _LoanFormScreenState extends ConsumerState<LoanFormScreen> {
     setState(() => saving = false);
     if (loanId != null) {
       undo.offer('Loan draft created.', () => loans.undoCreateDraft(loanId));
-      context.go('/loans');
+      // Open the new draft (the Loans list defaults to Active, so the draft
+      // would not be listed there); its next step is Confirm & Disburse.
+      context.go('/loans/$loanId?from=loans');
     } else {
       undo.record('Loan draft could not be created. Try again.');
     }

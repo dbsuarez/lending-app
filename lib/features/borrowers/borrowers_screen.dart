@@ -189,6 +189,8 @@ class _BorrowersScreenState extends ConsumerState<BorrowersScreen> {
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: DataTable(
+                  // Rows open on tap; there is nothing to select, so no checkboxes.
+                  showCheckboxColumn: false,
                   sortColumnIndex: sortColumnIndex,
                   sortAscending: sortAscending,
                   columns: [

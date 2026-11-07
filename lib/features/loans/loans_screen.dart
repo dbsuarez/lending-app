@@ -18,7 +18,8 @@ class LoansScreen extends ConsumerStatefulWidget {
 
 class _LoansScreenState extends ConsumerState<LoansScreen> {
   String query = '';
-  String statusFilter = 'all';
+  // Default to the loans you work with; other statuses are a tap away.
+  String statusFilter = 'active';
   int sortColumnIndex = 2;
   bool sortAscending = false;
 
@@ -177,6 +178,8 @@ class _LoansScreenState extends ConsumerState<LoansScreen> {
                   ? widget.personalOnly
                         ? 'No personal loans.'
                         : 'No business loan records yet.'
+                  : statusFilter != 'all' && normalized.isEmpty
+                  ? 'No loans with this status. Change the Status filter to see others.'
                   : 'No loans match your search.',
             ),
             if (scopedLoans.isEmpty && !widget.personalOnly) ...[
@@ -207,6 +210,8 @@ class _LoansScreenState extends ConsumerState<LoansScreen> {
               clipBehavior: Clip.antiAlias,
               child: SingleChildScrollView(
                 child: DataTable(
+                  // Rows open on tap; there is nothing to select, so no checkboxes.
+                  showCheckboxColumn: false,
                   sortColumnIndex: sortColumnIndex,
                   sortAscending: sortAscending,
                   columns: [

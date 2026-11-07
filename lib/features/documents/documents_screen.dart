@@ -22,7 +22,8 @@ class DocumentsScreen extends ConsumerStatefulWidget {
 class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
   int sortColumnIndex = 1;
   bool sortAscending = true;
-  String statusFilter = 'all';
+  // Documents are almost always for active loans.
+  String statusFilter = 'active';
 
   @override
   Widget build(BuildContext context) {
