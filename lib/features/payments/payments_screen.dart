@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/preferences/filter_defaults.dart';
 import '../../core/widgets/info_tip.dart';
 import '../../core/formatting.dart';
 import '../../core/undo/undo_controller.dart';
@@ -20,8 +21,13 @@ class PaymentsScreen extends ConsumerStatefulWidget {
 
 class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
   String query = '';
-  String statusFilter = 'all';
+  late String statusFilter = ref
+      .read(filterDefaultsProvider)
+      .get('payments.status', 'all');
   DateTimeRange? dateFilter;
+
+  /// Pending payments ticked for bulk Verify.
+  final Set<String> selected = {};
   int sortColumnIndex = 0;
   bool sortAscending = false;
 
@@ -96,33 +102,20 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
                 ),
                 SizedBox(
                   width: 190,
-                  child: DropdownButtonFormField<String>(
-                    isExpanded: true,
-                    initialValue: statusFilter,
-                    decoration: const InputDecoration(labelText: 'Status'),
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'all',
-                        child: Text('All statuses'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'pending',
-                        child: Text('Pending'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'verified',
-                        child: Text('Verified'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'rejected',
-                        child: Text('Rejected'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'reversed',
-                        child: Text('Reversed'),
-                      ),
+                  child: DefaultableFilterDropdown(
+                    listKey: 'payments.status',
+                    listName: 'Payments',
+                    label: 'Status',
+                    value: statusFilter,
+                    fallback: 'all',
+                    options: const [
+                      ('all', 'All statuses'),
+                      ('pending', 'Pending'),
+                      ('verified', 'Verified'),
+                      ('rejected', 'Rejected'),
+                      ('reversed', 'Reversed'),
                     ],
-                    onChanged: (value) => setState(() => statusFilter = value!),
+                    onChanged: (value) => setState(() => statusFilter = value),
                   ),
                 ),
                 OutlinedButton.icon(
@@ -207,12 +200,23 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
         ),
       );
     }
-    return LayoutBuilder(
+    // Only pending payments that are visible right now can be bulk-verified,
+    // so nothing hidden by search or filters is verified by accident.
+    final pending = payments.where((p) => p.status == 'pending').toList();
+    final chosen = pending.where((p) => selected.contains(p.id)).toList();
+    void toggle(PaymentSummary payment, bool on) => setState(
+      () => on ? selected.add(payment.id) : selected.remove(payment.id),
+    );
+    final list = LayoutBuilder(
       builder: (context, constraints) => constraints.maxWidth < 760
           ? ResponsiveCardList(
               itemCount: payments.length,
               itemBuilder: (_, index) => _PaymentCard(
                 payments[index],
+                selected: payments[index].status == 'pending'
+                    ? selected.contains(payments[index].id)
+                    : null,
+                onSelected: (on) => toggle(payments[index], on),
                 onVerify: () => _verify(payments[index]),
                 onReject: () => _reject(payments[index]),
                 onReverse: () => _reverse(payments[index]),
@@ -222,6 +226,13 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
               clipBehavior: Clip.antiAlias,
               child: SingleChildScrollView(
                 child: DataTable(
+                  // Checkboxes only when there is something to bulk-verify.
+                  showCheckboxColumn: pending.isNotEmpty,
+                  onSelectAll: (on) => setState(() {
+                    for (final p in pending) {
+                      on == true ? selected.add(p.id) : selected.remove(p.id);
+                    }
+                  }),
                   sortColumnIndex: sortColumnIndex,
                   sortAscending: sortAscending,
                   columns: [
@@ -240,6 +251,10 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
                   rows: [
                     for (final payment in payments)
                       DataRow(
+                        selected: selected.contains(payment.id),
+                        onSelectChanged: payment.status == 'pending'
+                            ? (on) => toggle(payment, on ?? false)
+                            : null,
                         cells: [
                           DataCell(
                             Text(formatPhilippineDateTime(payment.receivedAt)),
@@ -262,6 +277,89 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
                 ),
               ),
             ),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (chosen.isNotEmpty)
+          Card(
+            color: Theme.of(context).colorScheme.secondaryContainer,
+            margin: const EdgeInsets.only(bottom: 10),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
+              child: Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                runSpacing: 4,
+                children: [
+                  Text(
+                    '${chosen.length} selected · '
+                    '${formatPeso(chosen.fold(0, (sum, p) => sum + p.amountCentavos))}',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextButton(
+                        onPressed: () => setState(selected.clear),
+                        child: const Text('Clear'),
+                      ),
+                      FilledButton.icon(
+                        onPressed: () => _verifySelected(chosen),
+                        icon: const Icon(Icons.done_all),
+                        label: const Text('Verify selected'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        Expanded(child: list),
+      ],
+    );
+  }
+
+  Future<void> _verifySelected(List<PaymentSummary> chosen) async {
+    final total = chosen.fold(0, (sum, p) => sum + p.amountCentavos);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: TitleWithInfo('Verify ${chosen.length} payments?', 'verify'),
+        content: Text(
+          'This confirms ${formatPeso(total)} arrived, in ${chosen.length} '
+          'payments. Each is applied to the oldest unpaid installments '
+          '(interest first, then principal), oldest payment first. You can '
+          'undo this right after.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Confirm Received'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final payments = ref.read(paymentsControllerProvider.notifier);
+    final verified = await payments.verifyMany(chosen);
+    if (!mounted) return;
+    setState(selected.clear);
+    final failed = chosen.length - verified.length;
+    if (verified.isEmpty) {
+      _undo.record(
+        'No payments could be verified. Check your access and try again.',
+      );
+      return;
+    }
+    _undo.offer(
+      '${verified.length} payments confirmed and applied'
+      '${failed > 0 ? '; $failed could not be verified' : ''}.',
+      () => payments.undoVerifications(verified),
     );
   }
 
@@ -412,9 +510,15 @@ class _PaymentCard extends StatelessWidget {
     required this.onVerify,
     required this.onReject,
     required this.onReverse,
+    this.selected,
+    this.onSelected,
   });
   final PaymentSummary payment;
   final VoidCallback onVerify, onReject, onReverse;
+
+  /// Null when the payment cannot be selected (not pending).
+  final bool? selected;
+  final ValueChanged<bool>? onSelected;
 
   @override
   Widget build(BuildContext context) => Card(
@@ -425,6 +529,11 @@ class _PaymentCard extends StatelessWidget {
         children: [
           Row(
             children: [
+              if (selected != null)
+                Checkbox(
+                  value: selected,
+                  onChanged: (on) => onSelected?.call(on ?? false),
+                ),
               Expanded(
                 child: Text(
                   payment.borrowerName,

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../core/preferences/filter_defaults.dart';
 import '../../core/undo/undo_controller.dart';
 import '../../core/formatting.dart';
 import '../../core/widgets/responsive_card_list.dart';
@@ -22,8 +23,11 @@ class DocumentsScreen extends ConsumerStatefulWidget {
 class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
   int sortColumnIndex = 1;
   bool sortAscending = true;
-  // Documents are almost always for active loans.
-  String statusFilter = 'active';
+  // Documents are almost always for active loans; long-press an option to
+  // change the remembered default.
+  late String statusFilter = ref
+      .read(filterDefaultsProvider)
+      .get('documents.status', 'active');
 
   @override
   Widget build(BuildContext context) {
@@ -41,25 +45,21 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
             alignment: Alignment.centerLeft,
             child: SizedBox(
               width: 190,
-              child: DropdownButtonFormField<String>(
-                isExpanded: true,
-                initialValue: statusFilter,
-                decoration: const InputDecoration(labelText: 'Loan status'),
-                items: const [
-                  DropdownMenuItem(value: 'all', child: Text('All statuses')),
-                  DropdownMenuItem(value: 'draft', child: Text('Draft')),
-                  DropdownMenuItem(value: 'active', child: Text('Active')),
-                  DropdownMenuItem(value: 'fully_paid', child: Text('Paid')),
-                  DropdownMenuItem(
-                    value: 'refinanced',
-                    child: Text('Refinanced'),
-                  ),
-                  DropdownMenuItem(
-                    value: 'cancelled',
-                    child: Text('Cancelled'),
-                  ),
+              child: DefaultableFilterDropdown(
+                listKey: 'documents.status',
+                listName: 'Documents',
+                label: 'Loan status',
+                value: statusFilter,
+                fallback: 'active',
+                options: const [
+                  ('all', 'All statuses'),
+                  ('draft', 'Draft'),
+                  ('active', 'Active'),
+                  ('fully_paid', 'Paid'),
+                  ('refinanced', 'Refinanced'),
+                  ('cancelled', 'Cancelled'),
                 ],
-                onChanged: (value) => setState(() => statusFilter = value!),
+                onChanged: (value) => setState(() => statusFilter = value),
               ),
             ),
           ),

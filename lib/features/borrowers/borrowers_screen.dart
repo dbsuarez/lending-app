@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/preferences/filter_defaults.dart';
 import '../../core/undo/undo_controller.dart';
 import '../../domain/models/models.dart';
 import '../../core/widgets/clearable_search_field.dart';
@@ -16,7 +17,9 @@ class BorrowersScreen extends ConsumerStatefulWidget {
 
 class _BorrowersScreenState extends ConsumerState<BorrowersScreen> {
   String query = '';
-  String loanFilter = 'all';
+  late String loanFilter = ref
+      .read(filterDefaultsProvider)
+      .get('borrowers.loan', 'all');
   int sortColumnIndex = 0;
   bool sortAscending = true;
   @override
@@ -89,25 +92,18 @@ class _BorrowersScreenState extends ConsumerState<BorrowersScreen> {
                 ),
                 SizedBox(
                   width: 190,
-                  child: DropdownButtonFormField<String>(
-                    isExpanded: true,
-                    initialValue: loanFilter,
-                    decoration: const InputDecoration(labelText: 'Loan status'),
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'all',
-                        child: Text('All borrowers'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'active',
-                        child: Text('Has ongoing loan'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'none',
-                        child: Text('No active loan'),
-                      ),
+                  child: DefaultableFilterDropdown(
+                    listKey: 'borrowers.loan',
+                    listName: 'Borrowers',
+                    label: 'Loan status',
+                    value: loanFilter,
+                    fallback: 'all',
+                    options: const [
+                      ('all', 'All borrowers'),
+                      ('active', 'Has ongoing loan'),
+                      ('none', 'No active loan'),
                     ],
-                    onChanged: (value) => setState(() => loanFilter = value!),
+                    onChanged: (value) => setState(() => loanFilter = value),
                   ),
                 ),
               ],

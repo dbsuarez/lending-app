@@ -145,6 +145,56 @@ class PaymentsController extends AsyncNotifier<List<PaymentSummary>> {
     }
   }
 
+  /// Verifies several pending payments, oldest received first (so money is
+  /// applied in the order it arrived). Returns the ids that were verified;
+  /// ones that fail (e.g. no permission) are skipped.
+  Future<List<String>> verifyMany(List<PaymentSummary> payments) async {
+    final ordered = [...payments]
+      ..sort((a, b) => a.receivedAt.compareTo(b.receivedAt));
+    final verified = <String>[];
+    for (final payment in ordered) {
+      try {
+        if (isLive) {
+          await _repository!.verify(payment.id);
+        } else {
+          await _initialBuild();
+          _replaceLocal(payment, 'verified');
+        }
+        verified.add(payment.id);
+      } catch (_) {}
+    }
+    if (isLive) {
+      state = await AsyncValue.guard(() => _repository!.fetchPayments());
+    }
+    return verified;
+  }
+
+  /// Undo for [verifyMany]: returns the payments to pending, newest first
+  /// (the server only allows undoing the latest verification on a loan).
+  Future<bool> undoVerifications(List<String> paymentIds) async {
+    var allUndone = true;
+    for (final id in paymentIds.reversed) {
+      try {
+        if (isLive) {
+          await _repository!.undoVerification(id);
+        } else {
+          final payment = _localPayments.where((p) => p.id == id).firstOrNull;
+          if (payment == null) {
+            allUndone = false;
+            continue;
+          }
+          _replaceLocal(payment, 'pending');
+        }
+      } catch (_) {
+        allUndone = false;
+      }
+    }
+    if (isLive) {
+      state = await AsyncValue.guard(() => _repository!.fetchPayments());
+    }
+    return allUndone;
+  }
+
   // ---- Undo (single level; see UndoController) ----
 
   /// Undo "record payment": the payment becomes rejected (and, for Cash,

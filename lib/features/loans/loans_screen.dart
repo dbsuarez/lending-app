@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/preferences/filter_defaults.dart';
 import '../../core/formatting.dart';
 import '../../core/widgets/responsive_card_list.dart';
 import '../../core/widgets/app_status_badge.dart';
@@ -18,8 +19,13 @@ class LoansScreen extends ConsumerStatefulWidget {
 
 class _LoansScreenState extends ConsumerState<LoansScreen> {
   String query = '';
-  // Default to the loans you work with; other statuses are a tap away.
-  String statusFilter = 'active';
+  // Opens on the remembered default (long-press an option to change it);
+  // Active unless the user picked another.
+  String get _filterKey =>
+      widget.personalOnly ? 'personal_loans.status' : 'loans.status';
+  late String statusFilter = ref
+      .read(filterDefaultsProvider)
+      .get(_filterKey, 'active');
   int sortColumnIndex = 2;
   bool sortAscending = false;
 
@@ -79,31 +85,21 @@ class _LoansScreenState extends ConsumerState<LoansScreen> {
                 ),
                 SizedBox(
                   width: 180,
-                  child: DropdownButtonFormField<String>(
-                    isExpanded: true,
-                    initialValue: statusFilter,
-                    decoration: const InputDecoration(labelText: 'Status'),
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'all',
-                        child: Text('All statuses'),
-                      ),
-                      DropdownMenuItem(value: 'draft', child: Text('Draft')),
-                      DropdownMenuItem(value: 'active', child: Text('Active')),
-                      DropdownMenuItem(
-                        value: 'fully_paid',
-                        child: Text('Paid'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'refinanced',
-                        child: Text('Refinanced'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'cancelled',
-                        child: Text('Cancelled'),
-                      ),
+                  child: DefaultableFilterDropdown(
+                    listKey: _filterKey,
+                    listName: widget.personalOnly ? 'Personal Loans' : 'Loans',
+                    label: 'Status',
+                    value: statusFilter,
+                    fallback: 'active',
+                    options: const [
+                      ('all', 'All statuses'),
+                      ('draft', 'Draft'),
+                      ('active', 'Active'),
+                      ('fully_paid', 'Paid'),
+                      ('refinanced', 'Refinanced'),
+                      ('cancelled', 'Cancelled'),
                     ],
-                    onChanged: (value) => setState(() => statusFilter = value!),
+                    onChanged: (value) => setState(() => statusFilter = value),
                   ),
                 ),
               ],
