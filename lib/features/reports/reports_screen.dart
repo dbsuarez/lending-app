@@ -3,7 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_saver/file_saver.dart';
 import 'dart:convert';
 import 'dart:typed_data';
+import '../../core/widgets/info_tip.dart';
+import '../../core/undo/undo_controller.dart';
 import '../../core/formatting.dart';
+import '../../core/widgets/metric_grid.dart';
 import '../../domain/models/models.dart';
 import '../loans/loans_controller.dart';
 import '../payments/payments_controller.dart';
@@ -79,20 +82,31 @@ class ReportsScreen extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: 16),
-        Wrap(
-          spacing: 12,
-          runSpacing: 12,
+        MetricGrid(
           children: [
-            _Metric('Active loans', '${active.length}'),
-            _Metric('Principal disbursed', formatPeso(principal)),
-            _Metric('Contractual total', formatPeso(contractual)),
-            _Metric('Verified collections', formatPeso(verified)),
-            _Metric('Pending verification', formatPeso(pending)),
+            MetricCard('Active loans', '${active.length}'),
+            MetricCard(
+              'Money lent out',
+              formatPeso(principal),
+              info: 'disburse',
+            ),
+            MetricCard(
+              'Contractual total',
+              formatPeso(contractual),
+              info: 'contractual_total',
+            ),
+            MetricCard('Verified collections', formatPeso(verified)),
+            MetricCard(
+              'Pending verification',
+              formatPeso(pending),
+              info: 'pending_verification',
+            ),
           ],
         ),
         const SizedBox(height: 20),
-        Text(
+        TitleWithInfo(
           'Outstanding balance aging',
+          'aging',
           style: Theme.of(context).textTheme.titleLarge,
         ),
         const SizedBox(height: 8),
@@ -105,16 +119,18 @@ class ReportsScreen extends ConsumerWidget {
                     ),
                   ),
                 )
-              : Wrap(
-                  spacing: 12,
-                  runSpacing: 12,
+              : MetricGrid(
                   children: [
-                    _Metric('Not yet due', formatPeso(report.current)),
-                    _Metric('1-30 days', formatPeso(report.days1to30)),
-                    _Metric('31-60 days', formatPeso(report.days31to60)),
-                    _Metric('61-90 days', formatPeso(report.days61to90)),
-                    _Metric('Over 90 days', formatPeso(report.days90Plus)),
-                    _Metric('Total outstanding', formatPeso(report.total)),
+                    MetricCard('Not yet due', formatPeso(report.current)),
+                    MetricCard('1-30 days', formatPeso(report.days1to30)),
+                    MetricCard('31-60 days', formatPeso(report.days31to60)),
+                    MetricCard('61-90 days', formatPeso(report.days61to90)),
+                    MetricCard('Over 90 days', formatPeso(report.days90Plus)),
+                    MetricCard(
+                      'Total outstanding',
+                      formatPeso(report.total),
+                      info: 'still_owed',
+                    ),
                   ],
                 ),
           loading: () => const LinearProgressIndicator(),
@@ -148,10 +164,7 @@ class ReportsScreen extends ConsumerWidget {
                 ),
         ),
         const SizedBox(height: 20),
-        Text(
-          'Reconciliation attention',
-          style: Theme.of(context).textTheme.titleLarge,
-        ),
+        Text('Payment checks', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 8),
         Card(
           child: unapplied.isEmpty
@@ -159,7 +172,7 @@ class ReportsScreen extends ConsumerWidget {
                   leading: Icon(Icons.check_circle_outline),
                   title: Text('No unapplied payment credits'),
                   subtitle: Text(
-                    'Verified payments are fully reconciled to installment balances.',
+                    'All confirmed payments are fully applied to installments.',
                   ),
                 )
               : Column(
@@ -228,9 +241,7 @@ class ReportsScreen extends ConsumerWidget {
       mimeType: MimeType.csv,
     );
     if (context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('CSV export created.')));
+      undoOf(context).notify('CSV export created.');
     }
   }
 
@@ -240,29 +251,4 @@ class ReportsScreen extends ConsumerWidget {
   }
 }
 
-class _Metric extends StatelessWidget {
-  const _Metric(this.label, this.value);
-  final String label, value;
-  @override
-  Widget build(BuildContext context) => SizedBox(
-    width: 230,
-    height: 100,
-    child: Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(label),
-            const Spacer(),
-            Text(
-              value,
-              textAlign: TextAlign.right,
-              style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
-}
+/// Lays metric cards out in equal columns: two on phones, up to six wide.

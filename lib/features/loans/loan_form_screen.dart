@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/formatting.dart';
+import '../../core/undo/undo_controller.dart';
 import '../../domain/models/models.dart';
 import '../../domain/services/loan_calculator.dart';
 import '../borrowers/borrowers_controller.dart';
@@ -52,13 +53,9 @@ class _LoanFormScreenState extends ConsumerState<LoanFormScreen> {
       paydayPattern: pattern,
     );
     if (!_sameDate(result.installments.first.dueDate, firstDue)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'First due date must match the selected payday pattern.',
-          ),
-        ),
-      );
+      undoOf(
+        context,
+      ).notify('First due date must match the selected payday pattern.');
       return;
     }
     setState(() => quote = result);
@@ -70,107 +67,117 @@ class _LoanFormScreenState extends ConsumerState<LoanFormScreen> {
     if (currentQuote == null || borrowers == null || borrowerId == null) return;
     final borrower = borrowers.firstWhere((item) => item.id == borrowerId);
     setState(() => saving = true);
-    final saved = await ref
-        .read(loansControllerProvider.notifier)
-        .createDraft(
-          borrower: borrower,
-          quote: currentQuote,
-          firstDueDate: firstDue,
-          paydayPattern: pattern,
-        );
+    final loans = ref.read(loansControllerProvider.notifier);
+    final undo = ref.read(undoControllerProvider.notifier);
+    final loanId = await loans.createDraft(
+      borrower: borrower,
+      quote: currentQuote,
+      firstDueDate: firstDue,
+      paydayPattern: pattern,
+    );
     if (!mounted) return;
     setState(() => saving = false);
-    if (saved) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Loan draft created.')));
+    if (loanId != null) {
+      undo.offer('Loan draft created.', () => loans.undoCreateDraft(loanId));
       context.go('/loans');
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Loan draft could not be created. Try again.'),
-        ),
-      );
+      undo.record('Loan draft could not be created. Try again.');
     }
   }
 
   @override
-  Widget build(BuildContext context) => SingleChildScrollView(
-    padding: const EdgeInsets.all(24),
-    child: Card(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Form(
-          key: key,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Create loan',
-                style: Theme.of(context).textTheme.headlineMedium,
-              ),
-              const Text(
-                'A draft does not disburse funds or create a confirmed obligation.',
-              ),
-              const SizedBox(height: 20),
-              Stepper(
-                currentStep: step,
-                onStepTapped: (v) => setState(() => step = v),
-                controlsBuilder: (context, d) => const SizedBox.shrink(),
-                steps: [
-                  Step(
-                    title: const Text('Terms'),
-                    isActive: step >= 0,
-                    content: _terms(),
-                  ),
-                  Step(
-                    title: const Text('Schedule'),
-                    isActive: step >= 1,
-                    content: _schedule(),
-                  ),
-                  Step(
-                    title: const Text('Review'),
-                    isActive: step >= 2,
-                    content: _review(),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  if (step > 0)
-                    TextButton(
-                      onPressed: () => setState(() => step--),
-                      child: const Text('Back'),
+  Widget build(BuildContext context) {
+    // Phones: tighter page/card padding and a slimmer stepper rail so form
+    // fields get most of the screen width.
+    final compact = MediaQuery.sizeOf(context).width < 600;
+    return SingleChildScrollView(
+      padding: EdgeInsets.all(compact ? 12 : 24),
+      child: Card(
+        child: Padding(
+          padding: EdgeInsets.all(compact ? 12 : 24),
+          child: Form(
+            key: key,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Create loan',
+                  style: Theme.of(context).textTheme.headlineMedium,
+                ),
+                const Text(
+                  'Saving a draft does not release any money. The borrower owes nothing until you confirm and release the loan.',
+                ),
+                const SizedBox(height: 20),
+                Stepper(
+                  // The page scrolls; without this the stepper's own list
+                  // swallows touch drags and the form can't scroll on phones.
+                  physics: const NeverScrollableScrollPhysics(),
+                  margin: compact
+                      ? const EdgeInsetsDirectional.only(
+                          start: 48,
+                          end: 4,
+                          bottom: 16,
+                        )
+                      : null,
+                  currentStep: step,
+                  onStepTapped: (v) => setState(() => step = v),
+                  controlsBuilder: (context, d) => const SizedBox.shrink(),
+                  steps: [
+                    Step(
+                      title: const Text('Terms'),
+                      isActive: step >= 0,
+                      content: _terms(),
                     ),
-                  const SizedBox(width: 8),
-                  FilledButton(
-                    onPressed: saving
-                        ? null
-                        : step == 0
-                        ? () {
-                            calculate();
-                            if (quote != null) setState(() => step = 1);
-                          }
-                        : step == 1
-                        ? () => setState(() => step = 2)
-                        : _saveDraft,
-                    child: saving
-                        ? const SizedBox.square(
-                            dimension: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : Text(step == 2 ? 'Create Draft' : 'Continue'),
-                  ),
-                ],
-              ),
-            ],
+                    Step(
+                      title: const Text('Schedule'),
+                      isActive: step >= 1,
+                      content: _schedule(),
+                    ),
+                    Step(
+                      title: const Text('Review'),
+                      isActive: step >= 2,
+                      content: _review(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    if (step > 0)
+                      TextButton(
+                        onPressed: () => setState(() => step--),
+                        child: const Text('Back'),
+                      ),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      onPressed: saving
+                          ? null
+                          : step == 0
+                          ? () {
+                              calculate();
+                              if (quote != null) setState(() => step = 1);
+                            }
+                          : step == 1
+                          ? () => setState(() => step = 2)
+                          : _saveDraft,
+                      child: saving
+                          ? const SizedBox.square(
+                              dimension: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : Text(step == 2 ? 'Create Draft' : 'Continue'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
+
   Widget _terms() {
     final config =
         ref.watch(operationsConfigProvider).value ?? OperationsConfig.defaults;
@@ -222,6 +229,7 @@ class _LoanFormScreenState extends ConsumerState<LoanFormScreen> {
           decoration: const InputDecoration(
             labelText: 'Flat monthly interest (%)',
             helperText: 'Presets: 3%, 6%, 10%; terms require compliance review',
+            helperMaxLines: 2,
           ),
           validator: _nonNegative,
         ),
@@ -295,6 +303,7 @@ class _LoanFormScreenState extends ConsumerState<LoanFormScreen> {
         ],
         const SizedBox(height: 12),
         ListTile(
+          contentPadding: EdgeInsets.zero,
           title: const Text('First due date'),
           subtitle: Text(formatPhilippineDate(firstDue)),
           trailing: const Icon(Icons.event),
@@ -309,6 +318,7 @@ class _LoanFormScreenState extends ConsumerState<LoanFormScreen> {
           },
         ),
         const ListTile(
+          contentPadding: EdgeInsets.zero,
           leading: Icon(Icons.gavel_outlined),
           title: Text('Penalty policy: None'),
           subtitle: Text('Default. No penalties are assessed or backdated.'),
@@ -323,23 +333,18 @@ class _LoanFormScreenState extends ConsumerState<LoanFormScreen> {
       children: [
         _totals(),
         const SizedBox(height: 12),
-        SizedBox(
-          height: 320,
-          child: ListView.builder(
-            itemCount: quote!.installments.length,
-            itemBuilder: (_, i) {
-              final x = quote!.installments[i];
-              return ListTile(
-                leading: CircleAvatar(child: Text('${x.sequence}')),
-                title: Text(formatPhilippineDate(x.dueDate)),
-                trailing: Text(
-                  formatPeso(x.amountCentavos),
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-              );
-            },
+        // Rendered inline (not a nested scroll view) so the page scrolls as
+        // one surface on phones.
+        for (final x in quote!.installments)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: CircleAvatar(child: Text('${x.sequence}')),
+            title: Text(formatPhilippineDate(x.dueDate)),
+            trailing: Text(
+              formatPeso(x.amountCentavos),
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+            ),
           ),
-        ),
       ],
     );
   }
@@ -354,7 +359,7 @@ class _LoanFormScreenState extends ConsumerState<LoanFormScreen> {
               leading: Icon(Icons.info_outline),
               title: Text('Review before confirmation'),
               subtitle: Text(
-                'Interest uses the original principal. Confirmed terms will be immutable; changes require an auditable event.',
+                'Interest is based on the original amount lent. Once you confirm the loan, its terms are locked, and any later change is recorded in the history.',
               ),
             ),
           ],

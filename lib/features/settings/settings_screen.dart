@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/undo/undo_controller.dart';
 import '../../core/config/app_config.dart';
 import '../../core/theme/theme_preferences_panel.dart';
 import 'operations_config_provider.dart';
@@ -232,13 +233,9 @@ class SettingsScreen extends ConsumerWidget {
       mimeType: MimeType.json,
     );
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Backup source exported. Keep it in encrypted storage.',
-          ),
-        ),
-      );
+      undoOf(
+        context,
+      ).notify('Backup source exported. Keep it in encrypted storage.');
     }
   }
 
@@ -278,23 +275,15 @@ class SettingsScreen extends ConsumerWidget {
         },
       );
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Backup validated: $count records readable. Restore owner: organization owner.',
-            ),
-          ),
+        undoOf(context).notify(
+          'Backup validated: $count records readable. Restore owner: organization owner.',
         );
       }
     } catch (_) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Backup validation failed. No live data was changed.',
-            ),
-          ),
-        );
+        undoOf(
+          context,
+        ).notify('Backup validation failed. No live data was changed.');
       }
     }
   }
@@ -402,12 +391,8 @@ class _StaffRolesDialogState extends State<_StaffRolesDialog> {
                         await _load();
                       } catch (_) {
                         if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'Role could not be changed. The organization must retain an owner.',
-                              ),
-                            ),
+                          undoOf(context).record(
+                            'Role could not be changed. The organization must retain an owner.',
                           );
                         }
                       }
@@ -448,22 +433,14 @@ class _StaffRolesDialogState extends State<_StaffRolesDialog> {
       );
       await _load();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Invitation email sent and staff access provisioned.',
-            ),
-          ),
-        );
+        undoOf(
+          context,
+        ).record('Invitation email sent and staff access set up.');
       }
     } catch (_) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Invitation could not be sent. Check the email and permissions.',
-            ),
-          ),
+        undoOf(context).record(
+          'Invitation could not be sent. Check the email and permissions.',
         );
       }
     }

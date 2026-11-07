@@ -1,6 +1,13 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../domain/models/models.dart';
 
+const _loanColumns =
+    'id, organization_id, borrower_id, principal_centavos, total_centavos, '
+    'monthly_rate_basis_points, term_months, status, is_personal, created_at, '
+    'borrower:borrowers(first_name,last_name), '
+    'disbursement:loan_disbursements(disbursed_on,voided_at), '
+    'payments(status,received_at)';
+
 class SupabaseLoansRepository {
   SupabaseLoansRepository(this._client);
 
@@ -26,9 +33,7 @@ class SupabaseLoansRepository {
     final orgId = await organizationId();
     final rows = await _client
         .from('loans')
-        .select(
-          'id, organization_id, borrower_id, principal_centavos, total_centavos, monthly_rate_basis_points, term_months, status, is_personal, created_at, borrower:borrowers(first_name,last_name)',
-        )
+        .select(_loanColumns)
         .eq('organization_id', orgId)
         .order('created_at', ascending: false);
     return rows.map(_fromRow).toList();
@@ -71,9 +76,7 @@ class SupabaseLoansRepository {
     final orgId = await organizationId();
     final row = await _client
         .from('loans')
-        .select(
-          'id, organization_id, borrower_id, principal_centavos, total_centavos, monthly_rate_basis_points, term_months, status, is_personal, created_at, borrower:borrowers(first_name,last_name)',
-        )
+        .select(_loanColumns)
         .eq('organization_id', orgId)
         .eq('id', id)
         .single();
@@ -146,12 +149,20 @@ class SupabaseLoansRepository {
     );
   }
 
-  Future<String> createShareLink({required String loanId}) async {
-    final result = await _client.rpc(
-      'create_loan_share_link',
-      params: {'p_loan_id': loanId, 'p_expires_at': '9999-12-31T23:59:59Z'},
+  Future<({String id, String token})> createShareLink({
+    required String loanId,
+  }) async {
+    final result = Map<String, dynamic>.from(
+      await _client.rpc(
+            'create_loan_share_link',
+            params: {
+              'p_loan_id': loanId,
+              'p_expires_at': '9999-12-31T23:59:59Z',
+            },
+          )
+          as Map,
     );
-    return (result as Map<String, dynamic>)['token'] as String;
+    return (id: result['id'] as String, token: result['token'] as String);
   }
 
   Future<List<LoanShareLinkSummary>> fetchShareLinks(String loanId) async {
@@ -190,25 +201,28 @@ class SupabaseLoansRepository {
         params: {'p_loan_id': loanId, 'p_reason': reason},
       );
 
-  Future<void> amendInstallmentDueDate({
+  /// Returns the amendment id.
+  Future<String> amendInstallmentDueDate({
     required String loanId,
     required int sequence,
     required DateTime newDueDate,
     required String reason,
     required DateTime consentDate,
     required String clientOperationId,
-  }) => _client.rpc(
-    'amend_installment_due_date',
-    params: {
-      'p_loan_id': loanId,
-      'p_sequence': sequence,
-      'p_new_due_date': _date(newDueDate),
-      'p_reason': reason,
-      'p_consent_date': _date(consentDate),
-      'p_supporting_document_id': null,
-      'p_client_operation_id': clientOperationId,
-    },
-  );
+  }) async =>
+      await _client.rpc(
+            'amend_installment_due_date',
+            params: {
+              'p_loan_id': loanId,
+              'p_sequence': sequence,
+              'p_new_due_date': _date(newDueDate),
+              'p_reason': reason,
+              'p_consent_date': _date(consentDate),
+              'p_supporting_document_id': null,
+              'p_client_operation_id': clientOperationId,
+            },
+          )
+          as String;
 
   Future<String> refinance({
     required String sourceLoanId,
@@ -261,24 +275,39 @@ class SupabaseLoansRepository {
     );
   }
 
-  Future<void> recordEarlyPayoff({
+  /// Returns the settlement payment id.
+  Future<String> recordEarlyPayoff({
     required String loanId,
     required DateTime date,
     required String method,
     required String reference,
     required String clientOperationId,
     required String deviceId,
-  }) => _client.rpc(
-    'record_early_payoff',
-    params: {
-      'p_loan_id': loanId,
-      'p_payoff_date': _date(date),
-      'p_method': method,
-      'p_reference': reference,
-      'p_client_operation_id': clientOperationId,
-      'p_device_id': deviceId,
-    },
+  }) async =>
+      await _client.rpc(
+            'record_early_payoff',
+            params: {
+              'p_loan_id': loanId,
+              'p_payoff_date': _date(date),
+              'p_method': method,
+              'p_reference': reference,
+              'p_client_operation_id': clientOperationId,
+              'p_device_id': deviceId,
+            },
+          )
+          as String;
+
+  // Undo (see migration 202611070033_transaction_undo.sql).
+  Future<void> undoActivation(String loanId) =>
+      _client.rpc('undo_loan_activation', params: {'p_loan_id': loanId});
+
+  Future<void> undoDueDateAmendment(String amendmentId) => _client.rpc(
+    'undo_due_date_amendment',
+    params: {'p_amendment_id': amendmentId},
   );
+
+  Future<void> undoEarlyPayoff(String paymentId) =>
+      _client.rpc('undo_early_payoff', params: {'p_payment_id': paymentId});
 
   Future<List<PaymentSummary>> fetchLoanPayments(String loanId) async {
     final rows = await _client
@@ -327,6 +356,24 @@ class SupabaseLoansRepository {
 
   LoanSummary _fromRow(Map<String, dynamic> row) {
     final borrower = row['borrower'] as Map<String, dynamic>;
+    // A loan has at most one active disbursement; undone ones are voided.
+    final rawDisbursement = row['disbursement'];
+    final disbursements = rawDisbursement is List
+        ? rawDisbursement.cast<Map>()
+        : [if (rawDisbursement is Map) rawDisbursement];
+    final disbursement = disbursements
+        .where((item) => item['voided_at'] == null)
+        .firstOrNull;
+    final disbursedOn = disbursement?['disbursed_on'] as String?;
+    final status = row['status'] as String;
+    DateTime? paidOn;
+    if (status == 'fully_paid') {
+      for (final payment in (row['payments'] as List?) ?? const []) {
+        if ((payment as Map)['status'] != 'verified') continue;
+        final receivedAt = DateTime.parse(payment['received_at'] as String);
+        if (paidOn == null || receivedAt.isAfter(paidOn)) paidOn = receivedAt;
+      }
+    }
     return LoanSummary(
       id: row['id'] as String,
       organizationId: row['organization_id'] as String,
@@ -336,9 +383,11 @@ class SupabaseLoansRepository {
       totalCentavos: row['total_centavos'] as int,
       monthlyRateBasisPoints: row['monthly_rate_basis_points'] as int,
       termMonths: row['term_months'] as int,
-      status: row['status'] as String,
+      status: status,
       createdAt: DateTime.parse(row['created_at'] as String),
       isPersonal: row['is_personal'] as bool? ?? false,
+      borrowedOn: disbursedOn == null ? null : DateTime.parse(disbursedOn),
+      paidOn: paidOn,
     );
   }
 

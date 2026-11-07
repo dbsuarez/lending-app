@@ -29,7 +29,7 @@ final liveDashboardProvider = FutureProvider<_DashboardData>((ref) async {
     client
         .from('payments')
         .select(
-          'amount_centavos,received_at,method,status,loan:loans!inner(is_personal,borrower:borrowers(first_name,last_name))',
+          'loan_id,amount_centavos,received_at,method,status,loan:loans!inner(is_personal,borrower:borrowers(first_name,last_name))',
         )
         .eq('loan.is_personal', false)
         .order('received_at', ascending: false),
@@ -113,6 +113,7 @@ class _DashboardData {
           _DueItem(
             '${borrower['last_name']}, ${borrower['first_name']}',
             balance,
+            row['loan_id'] as String,
           ),
         );
       }
@@ -133,6 +134,7 @@ class _DashboardData {
             row['amount_centavos'] as int,
             received,
             row['method'] as String,
+            row['loan_id'] as String,
           ),
         );
       }
@@ -152,14 +154,20 @@ class _DashboardData {
 }
 
 class _DueItem {
-  const _DueItem(this.name, this.amount);
-  final String name;
+  const _DueItem(this.name, this.amount, this.loanId);
+  final String name, loanId;
   final int amount;
 }
 
 class _PaymentItem {
-  const _PaymentItem(this.name, this.amount, this.receivedAt, this.method);
-  final String name, method;
+  const _PaymentItem(
+    this.name,
+    this.amount,
+    this.receivedAt,
+    this.method,
+    this.loanId,
+  );
+  final String name, method, loanId;
   final int amount;
   final DateTime receivedAt;
 }
@@ -189,13 +197,24 @@ class LiveDashboardScreen extends ConsumerWidget {
                 children: [
                   _hero(context),
                   const SizedBox(height: 10),
-                  GridView.count(
-                    crossAxisCount: mobile ? 2 : 4,
+                  GridView(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
-                    crossAxisSpacing: 9,
-                    mainAxisSpacing: 9,
-                    childAspectRatio: mobile ? 1.0 : 1.55,
+                    gridDelegate: mobile
+                        // Fixed height on phones so cards stay compact
+                        // regardless of screen width.
+                        ? const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            crossAxisSpacing: 9,
+                            mainAxisSpacing: 9,
+                            mainAxisExtent: 104,
+                          )
+                        : const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 4,
+                            crossAxisSpacing: 9,
+                            mainAxisSpacing: 9,
+                            childAspectRatio: 1.55,
+                          ),
                     children: [
                       _kpi(
                         context,
@@ -203,6 +222,7 @@ class LiveDashboardScreen extends ConsumerWidget {
                         data.outstanding,
                         '${data.activeLoans} active loans',
                         Icons.account_balance_wallet_outlined,
+                        '/loans',
                       ),
                       _kpi(
                         context,
@@ -210,6 +230,7 @@ class LiveDashboardScreen extends ConsumerWidget {
                         data.collected,
                         'Verified payments',
                         Icons.savings_outlined,
+                        '/payments',
                       ),
                       _kpi(
                         context,
@@ -217,6 +238,7 @@ class LiveDashboardScreen extends ConsumerWidget {
                         data.dueToday,
                         '${data.dueTodayCount} installments',
                         Icons.event_outlined,
+                        '/collections',
                       ),
                       _kpi(
                         context,
@@ -224,6 +246,7 @@ class LiveDashboardScreen extends ConsumerWidget {
                         data.overdue,
                         '${data.overdueCount} installments',
                         Icons.warning_amber_rounded,
+                        '/collections',
                       ),
                     ],
                   ),
@@ -246,31 +269,38 @@ class LiveDashboardScreen extends ConsumerWidget {
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      _action(
-                        'New Loan',
-                        Icons.add,
-                        () => context.go('/loans/new'),
-                      ),
-                      _action(
-                        'Record Payment',
-                        Icons.credit_card_outlined,
-                        () => context.go('/payments'),
-                      ),
-                      _action(
-                        'Collections',
-                        Icons.event_note_outlined,
-                        () => context.go('/collections'),
-                      ),
-                      _action(
-                        'Reports',
-                        Icons.bar_chart_outlined,
-                        () => context.go('/reports'),
-                      ),
-                      _action(
-                        'Documents',
-                        Icons.description_outlined,
-                        () => context.go('/documents'),
-                      ),
+                      for (final action in [
+                        _action(
+                          'New Loan',
+                          Icons.add,
+                          () => context.go('/loans/new'),
+                        ),
+                        _action(
+                          'Record Payment',
+                          Icons.credit_card_outlined,
+                          () => context.go('/payments'),
+                        ),
+                        _action(
+                          'Collections',
+                          Icons.event_note_outlined,
+                          () => context.go('/collections'),
+                        ),
+                        _action(
+                          'Reports',
+                          Icons.bar_chart_outlined,
+                          () => context.go('/reports'),
+                        ),
+                        _action(
+                          'Documents',
+                          Icons.description_outlined,
+                          () => context.go('/documents'),
+                        ),
+                      ])
+                        SizedBox(
+                          // Two even columns on phones; fixed width otherwise.
+                          width: mobile ? (box.maxWidth - 28 - 8) / 2 : 150,
+                          child: action,
+                        ),
                     ],
                   ),
                 ],
@@ -370,37 +400,45 @@ class LiveDashboardScreen extends ConsumerWidget {
     int amount,
     String note,
     IconData icon,
+    String target,
   ) => Card(
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: Theme.of(context).colorScheme.primary),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
-          ),
-          FittedBox(
-            child: Text(
-              formatPeso(amount),
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+    clipBehavior: Clip.antiAlias,
+    child: InkWell(
+      onTap: () => context.go(target),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: Theme.of(context).colorScheme.primary),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
             ),
-          ),
-          Text(
-            note,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 10,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            FittedBox(
+              child: Text(
+                formatPeso(amount),
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
             ),
-          ),
-        ],
+            Text(
+              note,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 10,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
       ),
     ),
   );
@@ -408,12 +446,14 @@ class LiveDashboardScreen extends ConsumerWidget {
   Widget _dueCard(BuildContext context, _DashboardData data) => _listCard(
     context,
     "Today's Collections",
+    '/collections',
     data.due.isEmpty
         ? [const ListTile(title: Text('No collections are due today.'))]
         : [
             for (final item in data.due)
               ListTile(
                 contentPadding: EdgeInsets.zero,
+                onTap: () => context.go('/loans/${item.loanId}?from=dashboard'),
                 title: Text(
                   item.name,
                   style: const TextStyle(fontWeight: FontWeight.w700),
@@ -426,12 +466,14 @@ class LiveDashboardScreen extends ConsumerWidget {
   Widget _paymentsCard(BuildContext context, _DashboardData data) => _listCard(
     context,
     'Recent Payments',
+    '/payments',
     data.payments.isEmpty
         ? [const ListTile(title: Text('No verified payments yet.'))]
         : [
             for (final item in data.payments)
               ListTile(
                 contentPadding: EdgeInsets.zero,
+                onTap: () => context.go('/loans/${item.loanId}?from=dashboard'),
                 title: Text(
                   item.name,
                   style: const TextStyle(fontWeight: FontWeight.w700),
@@ -444,29 +486,45 @@ class LiveDashboardScreen extends ConsumerWidget {
           ],
   );
 
-  Widget _listCard(BuildContext context, String title, List<Widget> children) =>
-      Card(
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _listCard(
+    BuildContext context,
+    String title,
+    String viewAllPath,
+    List<Widget> children,
+  ) => Card(
+    child: Padding(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Text(title, style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 6),
-              ...children,
+              Expanded(
+                child: Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              TextButton(
+                onPressed: () => context.go(viewAllPath),
+                child: const Text('View all'),
+              ),
             ],
           ),
-        ),
-      );
+          const SizedBox(height: 2),
+          ...children,
+        ],
+      ),
+    ),
+  );
 
   Widget _action(String label, IconData icon, VoidCallback onPressed) =>
       SizedBox(
-        width: 150,
         height: 54,
         child: OutlinedButton.icon(
           onPressed: onPressed,
           icon: Icon(icon),
-          label: Text(label),
+          label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
         ),
       );
 }

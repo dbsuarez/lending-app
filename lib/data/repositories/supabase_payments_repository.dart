@@ -71,6 +71,15 @@ class SupabasePaymentsRepository {
         params: {'p_payment_id': paymentId, 'p_reason': reason},
       );
 
+  // Undo (see migration 202611070033_transaction_undo.sql).
+  Future<void> undoRecord(String paymentId) =>
+      _client.rpc('undo_payment_record', params: {'p_payment_id': paymentId});
+
+  Future<void> undoVerification(String paymentId) => _client.rpc(
+    'undo_payment_verification',
+    params: {'p_payment_id': paymentId},
+  );
+
   PaymentSummary _fromRow(Map<String, dynamic> row) {
     final loan = row['loan'] as Map<String, dynamic>;
     final borrower = loan['borrower'] as Map<String, dynamic>;

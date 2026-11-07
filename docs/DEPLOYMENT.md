@@ -19,6 +19,40 @@ only:
 Confirm that neither `DEV_LOGIN_EMAIL` nor `DEV_LOGIN_PASSWORD` occurs anywhere
 under `build/web` before deployment.
 
+`tool/build_web.ps1` does all of the above in one step: it reads the two public
+values from `.env` without printing them, stamps `BUILD_ID` in Asia/Taipei time,
+builds, injects the public values into `build/web/status.html`, and fails if any
+development credential key or value is found under `build/web`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tool/build_web.ps1
+```
+
+## Customer status page
+
+Customer status links (`/s/<token>`) are served by `web/status.html`, a
+self-contained HTML page (about 14 KB) rather than the Flutter app, so it loads
+quickly on customers' phones. It calls only the public, token-checked
+`get_shared_loan_status` and `get_shared_business_name` RPCs. The
+`__SUPABASE_URL__` / `__SUPABASE_ANON_KEY__` placeholders are filled by
+`tool/build_web.ps1`; a build that skips that step shows "This page is not
+configured" instead of loan data. `firebase.json` rewrites `/s/**` to this page
+before the catch-all Flutter rewrite.
+
+## Release order: migrations before the app
+
+When a batch adds a migration that the app reads (new columns or RPCs), apply
+the migration to production **before** deploying the web build or installing
+an APK. Example: `202611070033_transaction_undo.sql` adds
+`loan_disbursements.voided_at` and `collection_activities.undone_at`; an app
+build that queries them fails on Loans and Collections if the migration is not
+live yet.
+
+Migrations can be checked locally first by applying the whole
+`supabase/migrations` chain to an in-process Postgres (PGlite) with stub
+`auth`/`storage` schemas; the undo migration was verified this way
+(23 behavioural checks) before release.
+
 ## Deploy
 
 After a verified release build:

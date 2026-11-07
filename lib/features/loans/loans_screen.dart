@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/formatting.dart';
+import '../../core/widgets/responsive_card_list.dart';
 import '../../core/widgets/app_status_badge.dart';
 import '../../core/widgets/clearable_search_field.dart';
 import '../../domain/models/models.dart';
@@ -136,17 +137,26 @@ class _LoansScreenState extends ConsumerState<LoansScreen> {
         )
         .toList();
     loans.sort((left, right) {
+      // Unpaid loans always sit below paid ones when sorting by paid date.
+      if (sortColumnIndex == 3 &&
+          (left.paidOn == null) != (right.paidOn == null)) {
+        return left.paidOn == null ? 1 : -1;
+      }
       final comparison = switch (sortColumnIndex) {
         0 => left.id.compareTo(right.id),
         1 => left.borrowerName.toLowerCase().compareTo(
           right.borrowerName.toLowerCase(),
         ),
-        2 => left.createdAt.compareTo(right.createdAt),
-        3 => left.principalCentavos.compareTo(right.principalCentavos),
-        4 => left.totalCentavos.compareTo(right.totalCentavos),
-        5 => left.status.compareTo(right.status),
+        2 => left.borrowedSortDate.compareTo(right.borrowedSortDate),
+        3 => left.paidOn == null ? 0 : left.paidOn!.compareTo(right.paidOn!),
+        4 => left.principalCentavos.compareTo(right.principalCentavos),
+        5 => left.totalCentavos.compareTo(right.totalCentavos),
+        6 => left.status.compareTo(right.status),
         _ => 0,
       };
+      if (comparison == 0 && sortColumnIndex != 2) {
+        return right.borrowedSortDate.compareTo(left.borrowedSortDate);
+      }
       return sortAscending ? comparison : -comparison;
     });
 
@@ -155,7 +165,12 @@ class _LoansScreenState extends ConsumerState<LoansScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.handshake_outlined, size: 48),
+            Icon(
+              widget.personalOnly
+                  ? Icons.person_outline
+                  : Icons.handshake_outlined,
+              size: 48,
+            ),
             const SizedBox(height: 12),
             Text(
               scopedLoans.isEmpty
@@ -179,9 +194,8 @@ class _LoansScreenState extends ConsumerState<LoansScreen> {
 
     return LayoutBuilder(
       builder: (context, constraints) => constraints.maxWidth < 760
-          ? ListView.separated(
+          ? ResponsiveCardList(
               itemCount: loans.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 8),
               itemBuilder: (_, index) => _LoanCard(
                 loans[index],
                 onTap: () => context.go(
@@ -198,7 +212,8 @@ class _LoansScreenState extends ConsumerState<LoansScreen> {
                   columns: [
                     DataColumn(label: const Text('Reference'), onSort: _sort),
                     DataColumn(label: const Text('Borrower'), onSort: _sort),
-                    DataColumn(label: const Text('Created'), onSort: _sort),
+                    DataColumn(label: const Text('Borrowed'), onSort: _sort),
+                    DataColumn(label: const Text('Paid'), onSort: _sort),
                     DataColumn(
                       label: const Text('Principal'),
                       numeric: true,
@@ -230,7 +245,8 @@ class _LoansScreenState extends ConsumerState<LoansScreen> {
     cells: [
       DataCell(Text(_reference(loan.id))),
       DataCell(Text(loan.borrowerName)),
-      DataCell(Text(formatPhilippineDate(loan.createdAt))),
+      DataCell(Text(_borrowedLabel(loan))),
+      DataCell(Text(_paidLabel(loan))),
       DataCell(Text(formatPeso(loan.principalCentavos))),
       DataCell(Text(formatPeso(loan.totalCentavos))),
       DataCell(AppStatusBadge(loan.status)),
@@ -266,7 +282,8 @@ class _LoanCard extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text('Reference: ${_reference(loan.id)}'),
-            Text('Created: ${formatPhilippineDate(loan.createdAt)}'),
+            Text('Borrowed: ${_borrowedLabel(loan)}'),
+            Text('Paid: ${_paidLabel(loan)}'),
             const SizedBox(height: 8),
             _amount('Principal', loan.principalCentavos),
             _amount('Total repayable', loan.totalCentavos),
@@ -316,3 +333,10 @@ class _LoansError extends StatelessWidget {
 }
 
 String _reference(String id) => 'LN-${id.substring(0, 8).toUpperCase()}';
+
+String _borrowedLabel(LoanSummary loan) => loan.borrowedOn == null
+    ? 'Not released'
+    : formatPhilippineDate(loan.borrowedOn!);
+
+String _paidLabel(LoanSummary loan) =>
+    loan.paidOn == null ? 'Not paid' : formatPhilippineDate(loan.paidOn!);

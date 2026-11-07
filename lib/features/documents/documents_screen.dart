@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:printing/printing.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../core/undo/undo_controller.dart';
 import '../../core/formatting.dart';
+import '../../core/widgets/responsive_card_list.dart';
 import '../../core/widgets/app_status_badge.dart';
 import '../../data/repositories/supabase_documents_repository.dart';
 import '../../domain/models/models.dart';
 import '../loans/loans_controller.dart';
-import 'loan_schedule_pdf.dart';
+import 'loan_print_menu.dart';
 
 class DocumentsScreen extends ConsumerStatefulWidget {
   const DocumentsScreen({super.key});
@@ -99,13 +100,12 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
           });
     return LayoutBuilder(
       builder: (context, constraints) => constraints.maxWidth < 760
-          ? ListView.separated(
+          ? ResponsiveCardList(
               itemCount: items.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 8),
               itemBuilder: (_, index) => _DocumentLoanCard(
                 items[index],
                 onEvidence: () => _manageEvidence(context, items[index]),
-                onSchedule: () => _printSchedule(items[index]),
+                onPrint: (document) => _print(items[index], document),
               ),
             )
           : Card(
@@ -143,10 +143,11 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
                                   icon: const Icon(Icons.attach_file),
                                   label: const Text('Evidence'),
                                 ),
-                                FilledButton.icon(
-                                  onPressed: () => _printSchedule(loan),
-                                  icon: const Icon(Icons.print_outlined),
-                                  label: const Text('Schedule'),
+                                LoanPrintMenu(
+                                  filled: true,
+                                  loadLoan: () => ref
+                                      .read(loansControllerProvider.notifier)
+                                      .fetchDetail(loan.id),
                                 ),
                               ],
                             ),
@@ -165,14 +166,11 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
     sortAscending = ascending;
   });
 
-  Future<void> _printSchedule(LoanSummary loan) async {
+  Future<void> _print(LoanSummary loan, LoanPrintDocument document) async {
     final detail = await ref
         .read(loansControllerProvider.notifier)
         .fetchDetail(loan.id);
-    await Printing.layoutPdf(
-      name: '${_reference(loan.id)}-schedule.pdf',
-      onLayout: (_) => LoanSchedulePdf.build(detail),
-    );
+    await printLoanDocument(detail, document);
   }
 
   Future<void> _uploadEvidence(BuildContext context, LoanSummary loan) async {
@@ -200,20 +198,12 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
         bytes: bytes,
       );
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Evidence uploaded to private storage.'),
-          ),
-        );
+        undoOf(context).record('Evidence uploaded to private storage.');
       }
     } catch (_) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Evidence upload failed. Use a PDF, JPG, or PNG no larger than 10 MB.',
-            ),
-          ),
+        undoOf(context).record(
+          'Evidence upload failed. Use a PDF, JPG, or PNG no larger than 10 MB.',
         );
       }
     }
@@ -284,10 +274,11 @@ class _DocumentLoanCard extends StatelessWidget {
   const _DocumentLoanCard(
     this.loan, {
     required this.onEvidence,
-    required this.onSchedule,
+    required this.onPrint,
   });
   final LoanSummary loan;
-  final VoidCallback onEvidence, onSchedule;
+  final VoidCallback onEvidence;
+  final void Function(LoanPrintDocument document) onPrint;
 
   @override
   Widget build(BuildContext context) => Card(
@@ -299,11 +290,15 @@ class _DocumentLoanCard extends StatelessWidget {
       ),
       trailing: PopupMenuButton<String>(
         tooltip: 'Document actions',
-        onSelected: (value) =>
-            value == 'evidence' ? onEvidence() : onSchedule(),
+        onSelected: (value) => switch (value) {
+          'schedule' => onPrint(LoanPrintDocument.schedule),
+          'ledger' => onPrint(LoanPrintDocument.ledger),
+          _ => onEvidence(),
+        },
         itemBuilder: (_) => const [
           PopupMenuItem(value: 'evidence', child: Text('Evidence')),
-          PopupMenuItem(value: 'schedule', child: Text('Print schedule')),
+          PopupMenuItem(value: 'schedule', child: Text('Print loan schedule')),
+          PopupMenuItem(value: 'ledger', child: Text('Print payment ledger')),
         ],
       ),
     ),

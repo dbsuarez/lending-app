@@ -64,6 +64,8 @@ class LoanSummary {
     required this.status,
     required this.createdAt,
     this.isPersonal = false,
+    this.borrowedOn,
+    this.paidOn,
   });
 
   final String id, organizationId, borrowerId, borrowerName, status;
@@ -73,6 +75,36 @@ class LoanSummary {
       termMonths;
   final DateTime createdAt;
   final bool isPersonal;
+
+  /// Disbursement date; null until the loan is released (drafts, cancelled).
+  final DateTime? borrowedOn;
+
+  /// Date of the last verified payment, set only once the loan is fully paid.
+  final DateTime? paidOn;
+
+  /// Date used to order loans: disbursement date, else creation date.
+  DateTime get borrowedSortDate => borrowedOn ?? createdAt;
+
+  LoanSummary copyWith({
+    String? status,
+    bool? isPersonal,
+    DateTime? borrowedOn,
+    bool clearBorrowedOn = false,
+  }) => LoanSummary(
+    id: id,
+    organizationId: organizationId,
+    borrowerId: borrowerId,
+    borrowerName: borrowerName,
+    principalCentavos: principalCentavos,
+    totalCentavos: totalCentavos,
+    monthlyRateBasisPoints: monthlyRateBasisPoints,
+    termMonths: termMonths,
+    status: status ?? this.status,
+    createdAt: createdAt,
+    isPersonal: isPersonal ?? this.isPersonal,
+    borrowedOn: clearBorrowedOn ? null : borrowedOn ?? this.borrowedOn,
+    paidOn: paidOn,
+  );
 }
 
 class LoanDetail {
@@ -84,6 +116,46 @@ class LoanDetail {
       installments.fold(0, (sum, item) => sum + item.paidCentavos);
   int get outstandingCentavos =>
       (summary.totalCentavos - paidCentavos).clamp(0, summary.totalCentavos);
+
+  /// Payment ledger rows in installment order with a running balance.
+  /// Shared by the on-screen ledger and the printed ledger PDF.
+  List<LedgerRow> ledgerRows({DateTime? asOf}) {
+    final today = asOf ?? DateTime.now();
+    var runningBalance = summary.totalCentavos;
+    final sorted = [...installments]
+      ..sort((a, b) => a.sequence.compareTo(b.sequence));
+    return [
+      for (final item in sorted)
+        LedgerRow(
+          installment: item,
+          endingBalanceCentavos: runningBalance =
+              (runningBalance - item.paidCentavos).clamp(
+                0,
+                summary.totalCentavos,
+              ),
+          status: item.paidCentavos >= item.amountCentavos
+              ? 'paid'
+              : item.paidCentavos > 0
+              ? 'partial'
+              : item.dueDate.isBefore(today)
+              ? 'overdue'
+              : 'upcoming',
+        ),
+    ];
+  }
+}
+
+class LedgerRow {
+  const LedgerRow({
+    required this.installment,
+    required this.endingBalanceCentavos,
+    required this.status,
+  });
+  final Installment installment;
+  final int endingBalanceCentavos;
+
+  /// One of paid, partial, overdue, upcoming.
+  final String status;
 }
 
 class EarlyPayoffQuote {

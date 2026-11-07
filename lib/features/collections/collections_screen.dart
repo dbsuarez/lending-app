@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
+import '../../core/undo/undo_controller.dart';
 import '../../core/formatting.dart';
 import '../../domain/models/models.dart';
 import '../loans/loans_controller.dart';
@@ -28,36 +29,52 @@ class CollectionsScreen extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Collections',
-                      style: Theme.of(context).textTheme.headlineMedium,
-                    ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'Contractual due dates, contact attempts, and promises to pay.',
-                    ),
-                  ],
-                ),
-              ),
-              OutlinedButton.icon(
-                onPressed: () => _showTemplates(context),
-                icon: const Icon(Icons.mark_email_read_outlined),
-                label: const Text('Reminder Templates'),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                tooltip: 'Refresh activity',
-                onPressed: () =>
-                    ref.read(collectionsControllerProvider.notifier).refresh(),
-                icon: const Icon(Icons.refresh),
-              ),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final heading = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Collections',
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Due dates, calls and visits, and promises to pay.',
+                  ),
+                ],
+              );
+              final actions = Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () => _showTemplates(context),
+                    icon: const Icon(Icons.mark_email_read_outlined),
+                    label: const Text('Reminder Templates'),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    tooltip: 'Refresh activity',
+                    onPressed: () => ref
+                        .read(collectionsControllerProvider.notifier)
+                        .refresh(),
+                    icon: const Icon(Icons.refresh),
+                  ),
+                ],
+              );
+              // Stack on narrow screens so the title is never squeezed.
+              return constraints.maxWidth < 600
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [heading, const SizedBox(height: 10), actions],
+                    )
+                  : Row(
+                      children: [
+                        Expanded(child: heading),
+                        actions,
+                      ],
+                    );
+            },
           ),
           const SizedBox(height: 16),
           Expanded(
@@ -126,9 +143,7 @@ class CollectionsScreen extends ConsumerWidget {
                   onPressed: () async {
                     await Clipboard.setData(ClipboardData(text: item.value));
                     if (dialogContext.mounted) {
-                      ScaffoldMessenger.of(dialogContext).showSnackBar(
-                        const SnackBar(content: Text('Template copied.')),
-                      );
+                      undoOf(dialogContext).notify('Template copied.');
                     }
                   },
                   icon: const Icon(Icons.copy),
@@ -219,7 +234,7 @@ class _Queue extends ConsumerWidget {
                               ),
                               title: Text(row.$1.borrowerName),
                               subtitle: Text(
-                                '${formatPhilippineDate(row.$2.dueDate)} · ${overdue ? 'Past contractual due date' : 'Upcoming'}',
+                                '${formatPhilippineDate(row.$2.dueDate)} · ${overdue ? 'Past due date' : 'Upcoming'}',
                               ),
                               trailing: Row(
                                 mainAxisSize: MainAxisSize.min,
@@ -227,6 +242,7 @@ class _Queue extends ConsumerWidget {
                                   Text(
                                     formatPeso(row.$2.amountCentavos),
                                     style: const TextStyle(
+                                      fontSize: 15,
                                       fontWeight: FontWeight.w700,
                                     ),
                                   ),
@@ -263,31 +279,31 @@ class _Queue extends ConsumerWidget {
       builder: (_) => _ActivityDialog(loan),
     );
     if (values == null) return;
-    final saved = await ref
-        .read(collectionsControllerProvider.notifier)
-        .record(
-          loan: loan,
-          type: values.type,
-          outcome: values.outcome,
-          notes: values.notes,
-          promisedOn: values.promisedOn,
-          promisedAmountCentavos: values.promisedAmountCentavos,
-        );
-    final queued = ref
-        .read(collectionsControllerProvider.notifier)
-        .lastRecordQueued;
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          saved
-              ? queued
-                    ? 'Saved offline. It will sync automatically when the connection returns.'
-                    : 'Collection activity recorded.'
-              : 'Activity could not be recorded.',
-        ),
-      ),
+    final collections = ref.read(collectionsControllerProvider.notifier);
+    final saved = await collections.record(
+      loan: loan,
+      type: values.type,
+      outcome: values.outcome,
+      notes: values.notes,
+      promisedOn: values.promisedOn,
+      promisedAmountCentavos: values.promisedAmountCentavos,
     );
+    final queued = collections.lastRecordQueued;
+    final activityId = collections.lastRecordedId;
+    if (!context.mounted) return;
+    final undo = undoOf(context);
+    if (saved && !queued && activityId != null) {
+      undo.offer(
+        'Collection activity recorded.',
+        () => collections.undoRecord(activityId),
+      );
+    } else {
+      undo.record(
+        saved
+            ? 'Saved offline. It will sync automatically when the connection returns.'
+            : 'Activity could not be recorded.',
+      );
+    }
   }
 }
 

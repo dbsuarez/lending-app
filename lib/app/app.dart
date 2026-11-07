@@ -18,6 +18,7 @@ import '../features/collections/collections_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/settings/audit_events_screen.dart';
 import 'refined_shell.dart';
+import '../core/undo/undo_controller.dart';
 import 'theme/app_theme.dart';
 import 'theme/theme_mode_provider.dart';
 import '../core/theme/palette_provider.dart';
@@ -101,6 +102,8 @@ class LendingManagerApp extends ConsumerWidget {
       darkTheme: AppTheme.darkFor(palette.seed),
       themeMode: ref.watch(themeModeProvider),
       routerConfig: _router,
+      // App-wide so transaction/undo messages persist across navigation.
+      scaffoldMessengerKey: rootScaffoldMessengerKey,
     );
   }
 }

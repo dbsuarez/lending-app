@@ -16,6 +16,10 @@ class CollectionsController extends AsyncNotifier<List<CollectionActivity>> {
   SupabaseCollectionsRepository? _repository;
   final List<CollectionActivity> _local = [];
   bool lastRecordQueued = false;
+
+  /// Id of the last activity saved online (null when queued offline,
+  /// which cannot be undone until it syncs).
+  String? lastRecordedId;
   bool get isLive =>
       AppConfig.hasSupabase &&
       Supabase.instance.client.auth.currentUser != null;
@@ -33,6 +37,14 @@ class CollectionsController extends AsyncNotifier<List<CollectionActivity>> {
     state = await AsyncValue.guard(_repository!.fetchActivities);
   }
 
+  /// See LoansController._initialBuild: demo-mode inserts must wait for the
+  /// first async build, or its stale empty result overwrites them.
+  Future<void> _initialBuild() async {
+    try {
+      await future;
+    } catch (_) {}
+  }
+
   Future<bool> record({
     required LoanSummary loan,
     required String type,
@@ -41,7 +53,9 @@ class CollectionsController extends AsyncNotifier<List<CollectionActivity>> {
     DateTime? promisedOn,
     int? promisedAmountCentavos,
   }) async {
+    if (!isLive) await _initialBuild();
     lastRecordQueued = false;
+    lastRecordedId = null;
     final operationId = const Uuid().v4();
     final payload = <String, dynamic>{
       'p_loan_id': loan.id,
@@ -54,7 +68,7 @@ class CollectionsController extends AsyncNotifier<List<CollectionActivity>> {
     };
     try {
       if (isLive) {
-        await _repository!.record(
+        lastRecordedId = await _repository!.record(
           loanId: loan.id,
           type: type,
           outcome: outcome,
@@ -65,10 +79,11 @@ class CollectionsController extends AsyncNotifier<List<CollectionActivity>> {
         );
         state = AsyncData(await _repository!.fetchActivities());
       } else {
+        lastRecordedId = DateTime.now().microsecondsSinceEpoch.toString();
         _local.insert(
           0,
           CollectionActivity(
-            id: DateTime.now().microsecondsSinceEpoch.toString(),
+            id: lastRecordedId!,
             loanId: loan.id,
             borrowerName: loan.borrowerName,
             type: type,
@@ -107,6 +122,24 @@ class CollectionsController extends AsyncNotifier<List<CollectionActivity>> {
           return true;
         } catch (_) {}
       }
+      return false;
+    }
+  }
+
+  /// Undo "log collection activity" (marks it undone; hidden from lists).
+  Future<bool> undoRecord(String activityId) async {
+    try {
+      if (isLive) {
+        await _repository!.undo(activityId);
+        state = AsyncData(await _repository!.fetchActivities());
+        return true;
+      }
+      await _initialBuild();
+      final before = _local.length;
+      _local.removeWhere((item) => item.id == activityId);
+      state = AsyncData(List.unmodifiable(_local));
+      return _local.length < before;
+    } catch (_) {
       return false;
     }
   }

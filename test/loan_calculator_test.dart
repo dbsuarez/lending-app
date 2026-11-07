@@ -8,6 +8,9 @@ import 'package:lending_manager/features/loans/loans_controller.dart';
 import 'package:lending_manager/features/payments/payments_controller.dart';
 
 void main() {
+  // Schedule PDFs load the embedded Roboto font from the asset bundle.
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   test('shared date formatting follows UI standards', () {
     expect(formatPhilippineDate(DateTime(2026, 11, 6)), '2026-11-06');
     expect(
@@ -38,7 +41,7 @@ void main() {
           paydayPattern: const [15, 30],
         );
 
-    expect(saved, isTrue);
+    expect(saved, isNotNull);
     final loans = container.read(loansControllerProvider).value;
     expect(loans, hasLength(1));
     expect(loans!.single.totalCentavos, 2600000);
@@ -79,7 +82,7 @@ void main() {
           method: 'GCash',
           reference: 'TEST-001',
         );
-    expect(paymentSaved, isTrue);
+    expect(paymentSaved, isNotNull);
     final payments = container.read(paymentsControllerProvider).value!;
     expect(payments, hasLength(1));
     expect(payments.single.status, 'pending');
@@ -100,7 +103,7 @@ void main() {
           method: 'Cash',
           reference: 'CASH-001',
         );
-    expect(cashSaved, isTrue);
+    expect(cashSaved, isNotNull);
     expect(
       container.read(paymentsControllerProvider).value!.first.status,
       'verified',

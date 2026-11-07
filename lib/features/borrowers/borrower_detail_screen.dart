@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:file_saver/file_saver.dart';
 import 'dart:convert';
 import 'dart:typed_data';
+import '../../core/undo/undo_controller.dart';
 import '../../core/formatting.dart';
 import '../../core/widgets/app_status_badge.dart';
 import '../../domain/models/models.dart';
@@ -119,30 +120,42 @@ class BorrowerDetailScreen extends ConsumerWidget {
     title: Text(label),
     subtitle: Text(value.isEmpty ? 'Not provided' : value),
   );
-  static Widget _loans(BuildContext context, List<LoanSummary> loans) =>
-      loans.isEmpty
-      ? const Center(child: Text('No loans for this borrower.'))
-      : ListView.separated(
-          padding: const EdgeInsets.all(24),
-          itemCount: loans.length,
-          separatorBuilder: (_, _) => const SizedBox(height: 8),
-          itemBuilder: (_, i) => Card(
-            child: ListTile(
-              onTap: () => context.go(
-                '/loans/${loans[i].id}?from=borrower&borrowerId=${loans[i].borrowerId}',
-              ),
-              title: Text('LN-${loans[i].id.substring(0, 8).toUpperCase()}'),
-              subtitle: Align(
-                alignment: Alignment.centerLeft,
-                child: AppStatusBadge(loans[i].status),
-              ),
-              trailing: Text(
-                formatPeso(loans[i].totalCentavos),
-                style: const TextStyle(fontWeight: FontWeight.w700),
+  static Widget _loans(BuildContext context, List<LoanSummary> unsorted) {
+    final loans = [...unsorted]
+      ..sort((a, b) => b.borrowedSortDate.compareTo(a.borrowedSortDate));
+    return loans.isEmpty
+        ? const Center(child: Text('No loans for this borrower.'))
+        : ListView.separated(
+            padding: const EdgeInsets.all(24),
+            itemCount: loans.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 8),
+            itemBuilder: (_, i) => Card(
+              child: ListTile(
+                onTap: () => context.go(
+                  '/loans/${loans[i].id}?from=borrower&borrowerId=${loans[i].borrowerId}',
+                ),
+                title: Text('LN-${loans[i].id.substring(0, 8).toUpperCase()}'),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 4),
+                    Text(
+                      'Borrowed: ${loans[i].borrowedOn == null ? 'Not released' : formatPhilippineDate(loans[i].borrowedOn!)}'
+                      ' · Paid: ${loans[i].paidOn == null ? 'Not paid' : formatPhilippineDate(loans[i].paidOn!)}',
+                    ),
+                    const SizedBox(height: 4),
+                    AppStatusBadge(loans[i].status),
+                  ],
+                ),
+                trailing: Text(
+                  formatPeso(loans[i].totalCentavos),
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
               ),
             ),
-          ),
-        );
+          );
+  }
+
   static Widget _payments(List<PaymentSummary> payments) => payments.isEmpty
       ? const Center(child: Text('No payment records for this borrower.'))
       : ListView.separated(
@@ -250,9 +263,7 @@ class BorrowerDetailScreen extends ConsumerWidget {
       mimeType: MimeType.json,
     );
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Borrower data export created.')),
-      );
+      undoOf(context).notify('Borrower data export created.');
     }
   }
 }

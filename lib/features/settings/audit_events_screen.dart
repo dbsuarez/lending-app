@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/config/app_config.dart';
 import '../../core/formatting.dart';
+import '../../core/widgets/responsive_card_list.dart';
 import '../../core/widgets/clearable_search_field.dart';
 import '../../data/repositories/supabase_audit_repository.dart';
 import '../../domain/models/models.dart';
@@ -99,9 +100,8 @@ class _AuditEventsScreenState extends State<AuditEventsScreen> {
               }
               return LayoutBuilder(
                 builder: (context, constraints) => constraints.maxWidth < 760
-                    ? ListView.separated(
+                    ? ResponsiveCardList(
                         itemCount: items.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 8),
                         itemBuilder: (_, index) => _AuditCard(items[index]),
                       )
                     : Card(

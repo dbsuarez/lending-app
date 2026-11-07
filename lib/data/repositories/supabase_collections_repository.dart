@@ -11,6 +11,7 @@ class SupabaseCollectionsRepository {
         .select(
           'id, loan_id, activity_type, outcome, notes, promised_on, promised_amount_centavos, contacted_at, loan:loans(borrower:borrowers(first_name,last_name))',
         )
+        .isFilter('undone_at', null)
         .order('contacted_at', ascending: false)
         .limit(100);
     return [
@@ -31,7 +32,8 @@ class SupabaseCollectionsRepository {
     ];
   }
 
-  Future<void> record({
+  /// Returns the activity id.
+  Future<String> record({
     required String loanId,
     required String type,
     required String outcome,
@@ -39,17 +41,24 @@ class SupabaseCollectionsRepository {
     DateTime? promisedOn,
     int? promisedAmountCentavos,
     required String clientOperationId,
-  }) => _client.rpc(
-    'record_collection_activity',
-    params: {
-      'p_loan_id': loanId,
-      'p_activity_type': type,
-      'p_outcome': outcome,
-      'p_notes': notes,
-      'p_promised_on': promisedOn == null ? null : _date(promisedOn),
-      'p_promised_amount_centavos': promisedAmountCentavos,
-      'p_client_operation_id': clientOperationId,
-    },
+  }) async =>
+      await _client.rpc(
+            'record_collection_activity',
+            params: {
+              'p_loan_id': loanId,
+              'p_activity_type': type,
+              'p_outcome': outcome,
+              'p_notes': notes,
+              'p_promised_on': promisedOn == null ? null : _date(promisedOn),
+              'p_promised_amount_centavos': promisedAmountCentavos,
+              'p_client_operation_id': clientOperationId,
+            },
+          )
+          as String;
+
+  Future<void> undo(String activityId) => _client.rpc(
+    'undo_collection_activity',
+    params: {'p_activity_id': activityId},
   );
 
   String _borrowerName(Map<String, dynamic> row) {

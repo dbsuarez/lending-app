@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/undo/undo_controller.dart';
 import '../../domain/models/models.dart';
 import '../../core/widgets/clearable_search_field.dart';
+import '../../core/widgets/responsive_card_list.dart';
 import '../loans/loans_controller.dart';
 import 'borrowers_controller.dart';
 
@@ -169,9 +171,10 @@ class _BorrowersScreenState extends ConsumerState<BorrowersScreen> {
       builder: (context, constraints) => constraints.maxWidth < 760
           ? RefreshIndicator(
               onRefresh: ref.read(borrowersControllerProvider.notifier).refresh,
-              child: ListView.separated(
+              child: ResponsiveCardList(
+                physics: const AlwaysScrollableScrollPhysics(),
+                spacing: 10,
                 itemCount: borrowers.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 10),
                 itemBuilder: (_, i) => _BorrowerCard(
                   borrowers[i],
                   hasActiveLoan: activeBorrowerIds.contains(borrowers[i].id),
@@ -308,15 +311,16 @@ class _BorrowersScreenState extends ConsumerState<BorrowersScreen> {
     );
     if (confirmed != true) return;
 
-    final archived = await ref
-        .read(borrowersControllerProvider.notifier)
-        .archive(borrower);
+    final borrowers = ref.read(borrowersControllerProvider.notifier);
+    final archived = await borrowers.archive(borrower);
     if (!mounted) return;
-    _showMessage(
-      archived
-          ? 'Borrower archived.'
-          : 'Borrower could not be archived. Try again.',
-    );
+    if (archived) {
+      undoOf(
+        context,
+      ).offer('Borrower archived.', () => borrowers.restore(borrower));
+    } else {
+      _showMessage('Borrower could not be archived. Try again.');
+    }
   }
 
   Future<void> _showArchived() async {
@@ -366,11 +370,8 @@ class _BorrowersScreenState extends ConsumerState<BorrowersScreen> {
     );
   }
 
-  void _showMessage(String message) {
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
-  }
+  /// Result of a borrower transaction without undo (ends any current undo).
+  void _showMessage(String message) => undoOf(context).record(message);
 }
 
 class _BorrowerCard extends StatelessWidget {

@@ -34,17 +34,31 @@ class LoansController extends AsyncNotifier<List<LoanSummary>> {
     state = await AsyncValue.guard(() => _repository!.fetchLoans());
   }
 
-  Future<bool> createDraft({
+  /// Demo-mode mutators must wait for the first async build; otherwise a
+  /// build that finishes after the mutation overwrites it with the stale
+  /// (empty) list it captured. Happens when a screen's first use of this
+  /// provider is `ref.read(...notifier)` followed straight by a mutation.
+  Future<void> _initialBuild() async {
+    try {
+      await future;
+    } catch (_) {}
+  }
+
+  /// Returns the new loan id, or null on failure.
+  Future<String?> createDraft({
     required Borrower borrower,
     required LoanQuote quote,
     required DateTime firstDueDate,
     required List<int> paydayPattern,
   }) async {
+    // Before AsyncLoading: once loading is set, `future` would not resolve.
+    if (!isLive) await _initialBuild();
     state = const AsyncLoading();
     try {
       final operationId = const Uuid().v4();
+      String createdId = operationId;
       if (isLive) {
-        await _repository!.createDraft(
+        createdId = await _repository!.createDraft(
           borrowerId: borrower.id,
           quote: quote,
           firstDueDate: firstDueDate,
@@ -72,10 +86,10 @@ class LoansController extends AsyncNotifier<List<LoanSummary>> {
         _localQuotes[operationId] = quote;
         state = AsyncData(List.unmodifiable(_localLoans));
       }
-      return true;
+      return createdId;
     } catch (error, stackTrace) {
       state = AsyncError<List<LoanSummary>>(error, stackTrace);
-      return false;
+      return null;
     }
   }
 
@@ -103,20 +117,12 @@ class LoansController extends AsyncNotifier<List<LoanSummary>> {
         );
         state = AsyncData(await _repository!.fetchLoans());
       } else {
+        await _initialBuild();
         final index = _localLoans.indexWhere((loan) => loan.id == loanId);
         final old = _localLoans[index];
-        _localLoans[index] = LoanSummary(
-          id: old.id,
-          organizationId: old.organizationId,
-          borrowerId: old.borrowerId,
-          borrowerName: old.borrowerName,
-          principalCentavos: old.principalCentavos,
-          totalCentavos: old.totalCentavos,
-          monthlyRateBasisPoints: old.monthlyRateBasisPoints,
-          termMonths: old.termMonths,
+        _localLoans[index] = old.copyWith(
           status: 'active',
-          createdAt: old.createdAt,
-          isPersonal: old.isPersonal,
+          borrowedOn: disbursedOn,
         );
         state = AsyncData(List.unmodifiable(_localLoans));
       }
@@ -126,8 +132,8 @@ class LoansController extends AsyncNotifier<List<LoanSummary>> {
     }
   }
 
-  Future<String?> createShareLink(String loanId) async {
-    if (!isLive) return 'local-demo-$loanId';
+  Future<({String id, String token})?> createShareLink(String loanId) async {
+    if (!isLive) return (id: 'local-demo-$loanId', token: 'local-demo-$loanId');
     try {
       return await _repository!.createShareLink(loanId: loanId);
     } catch (_) {
@@ -159,22 +165,11 @@ class LoansController extends AsyncNotifier<List<LoanSummary>> {
         await _repository!.cancelDraft(loanId: loanId, reason: reason);
         state = AsyncData(await _repository!.fetchLoans());
       } else {
+        await _initialBuild();
         final index = _localLoans.indexWhere((loan) => loan.id == loanId);
         if (index < 0 || _localLoans[index].status != 'draft') return false;
         final old = _localLoans[index];
-        _localLoans[index] = LoanSummary(
-          id: old.id,
-          organizationId: old.organizationId,
-          borrowerId: old.borrowerId,
-          borrowerName: old.borrowerName,
-          principalCentavos: old.principalCentavos,
-          totalCentavos: old.totalCentavos,
-          monthlyRateBasisPoints: old.monthlyRateBasisPoints,
-          termMonths: old.termMonths,
-          status: 'cancelled',
-          createdAt: old.createdAt,
-          isPersonal: old.isPersonal,
-        );
+        _localLoans[index] = old.copyWith(status: 'cancelled');
         state = AsyncData(List.unmodifiable(_localLoans));
       }
       return true;
@@ -194,22 +189,11 @@ class LoansController extends AsyncNotifier<List<LoanSummary>> {
         await _repository!.setPersonal(loanId: loanId, personal: personal);
         state = AsyncData(await _repository!.fetchLoans());
       } else {
+        await _initialBuild();
         final index = _localLoans.indexWhere((loan) => loan.id == loanId);
         if (index < 0) return false;
         final old = _localLoans[index];
-        _localLoans[index] = LoanSummary(
-          id: old.id,
-          organizationId: old.organizationId,
-          borrowerId: old.borrowerId,
-          borrowerName: old.borrowerName,
-          principalCentavos: old.principalCentavos,
-          totalCentavos: old.totalCentavos,
-          monthlyRateBasisPoints: old.monthlyRateBasisPoints,
-          termMonths: old.termMonths,
-          status: old.status,
-          createdAt: old.createdAt,
-          isPersonal: personal,
-        );
+        _localLoans[index] = old.copyWith(isPersonal: personal);
         state = AsyncData(List.unmodifiable(_localLoans));
       }
       return true;
@@ -218,16 +202,17 @@ class LoansController extends AsyncNotifier<List<LoanSummary>> {
     }
   }
 
-  Future<bool> amendInstallmentDueDate({
+  /// Returns the amendment id, or null on failure.
+  Future<String?> amendInstallmentDueDate({
     required String loanId,
     required int sequence,
     required DateTime newDueDate,
     required String reason,
     required DateTime consentDate,
   }) async {
-    if (!isLive) return false;
+    if (!isLive) return null;
     try {
-      await _repository!.amendInstallmentDueDate(
+      final id = await _repository!.amendInstallmentDueDate(
         loanId: loanId,
         sequence: sequence,
         newDueDate: newDueDate,
@@ -236,9 +221,9 @@ class LoansController extends AsyncNotifier<List<LoanSummary>> {
         clientOperationId: const Uuid().v4(),
       );
       state = AsyncData(await _repository!.fetchLoans());
-      return true;
+      return id;
     } catch (_) {
-      return false;
+      return null;
     }
   }
 
@@ -281,16 +266,17 @@ class LoansController extends AsyncNotifier<List<LoanSummary>> {
     }
   }
 
-  Future<bool> recordEarlyPayoff({
+  /// Returns the settlement payment id, or null on failure.
+  Future<String?> recordEarlyPayoff({
     required String loanId,
     required DateTime date,
     required String method,
     required String reference,
   }) async {
-    if (!isLive) return false;
+    if (!isLive) return null;
     try {
       final userId = Supabase.instance.client.auth.currentUser!.id;
-      await _repository!.recordEarlyPayoff(
+      final id = await _repository!.recordEarlyPayoff(
         loanId: loanId,
         date: date,
         method: method,
@@ -299,6 +285,53 @@ class LoansController extends AsyncNotifier<List<LoanSummary>> {
         deviceId: '${kIsWeb ? 'web' : 'android'}-$userId',
       );
       state = AsyncData(await _repository!.fetchLoans());
+      return id;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // ---- Undo (single level; see UndoController) ----
+
+  Future<bool> undoCreateDraft(String loanId) =>
+      cancelDraft(loanId: loanId, reason: 'Undone right after creation.');
+
+  Future<bool> undoActivation(String loanId) => _undo(
+    live: () => _repository!.undoActivation(loanId),
+    local: () {
+      final index = _localLoans.indexWhere((loan) => loan.id == loanId);
+      if (index < 0 || _localLoans[index].status != 'active') return false;
+      _localLoans[index] = _localLoans[index].copyWith(
+        status: 'draft',
+        clearBorrowedOn: true,
+      );
+      return true;
+    },
+  );
+
+  Future<bool> undoDueDateAmendment(String amendmentId) => _undo(
+    live: () => _repository!.undoDueDateAmendment(amendmentId),
+    local: () => false,
+  );
+
+  Future<bool> undoEarlyPayoff(String paymentId) => _undo(
+    live: () => _repository!.undoEarlyPayoff(paymentId),
+    local: () => false,
+  );
+
+  Future<bool> _undo({
+    required Future<void> Function() live,
+    required bool Function() local,
+  }) async {
+    try {
+      if (isLive) {
+        await live();
+        state = AsyncData(await _repository!.fetchLoans());
+        return true;
+      }
+      await _initialBuild();
+      if (!local()) return false;
+      state = AsyncData(List.unmodifiable(_localLoans));
       return true;
     } catch (_) {
       return false;

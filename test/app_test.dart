@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:lending_manager/core/undo/undo_controller.dart';
 import 'package:lending_manager/app/app.dart';
 import 'package:lending_manager/features/borrowers/borrowers_screen.dart';
 import 'package:lending_manager/features/loans/loan_form_screen.dart';
@@ -8,8 +9,11 @@ import 'package:lending_manager/features/loans/loan_form_screen.dart';
 void main() {
   testWidgets('loan form opens with a stable payday selection', (tester) async {
     await tester.pumpWidget(
-      const ProviderScope(
-        child: MaterialApp(home: Scaffold(body: LoanFormScreen())),
+      ProviderScope(
+        child: MaterialApp(
+          scaffoldMessengerKey: rootScaffoldMessengerKey,
+          home: Scaffold(body: LoanFormScreen()),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -21,8 +25,11 @@ void main() {
 
   testWidgets('local borrower workflow creates a record', (tester) async {
     await tester.pumpWidget(
-      const ProviderScope(
-        child: MaterialApp(home: Scaffold(body: BorrowersScreen())),
+      ProviderScope(
+        child: MaterialApp(
+          scaffoldMessengerKey: rootScaffoldMessengerKey,
+          home: Scaffold(body: BorrowersScreen()),
+        ),
       ),
     );
     await tester.pumpAndSettle();

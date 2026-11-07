@@ -4,6 +4,7 @@
     "public": "build/web",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "rewrites": [
+      { "source": "/s/**", "destination": "/status.html" },
       { "source": "**", "destination": "/index.html" }
     ],
     "headers": [
@@ -14,7 +15,7 @@
         ]
       },
       {
-        "source": "/@(index.html|main.dart.js|flutter_bootstrap.js|flutter_service_worker.js|version.json)",
+        "source": "/@(index.html|status.html|main.dart.js|flutter_bootstrap.js|flutter_service_worker.js|version.json)",
         "headers": [
           { "key": "Cache-Control", "value": "no-cache,no-store,must-revalidate" }
         ]

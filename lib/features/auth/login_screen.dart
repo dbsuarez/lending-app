@@ -132,7 +132,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'Local demo uses clearly labeled fixture data and is not synchronized or production-ready.',
+                      'The demo uses sample data on this device only. Nothing is saved to your real records.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 12,

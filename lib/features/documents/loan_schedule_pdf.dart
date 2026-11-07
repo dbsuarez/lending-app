@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import '../../core/formatting.dart';
@@ -7,22 +8,71 @@ import '../../domain/models/models.dart';
 class LoanSchedulePdf {
   const LoanSchedulePdf._();
 
+  static final _blue = PdfColor.fromHex('#1257B8');
+  static final _paleBlue = PdfColor.fromHex('#EAF2FF');
+  static final _border = PdfColor.fromHex('#C8D4E3');
+
   static Future<Uint8List> build(
     LoanDetail loan, {
     DateTime? generatedOn,
-  }) async {
+  }) => _render(
+    loan,
+    generated: generatedOn ?? DateTime.now(),
+    title: 'Loan Schedule - ${loan.summary.borrowerName}',
+    subject: 'Installment schedule',
+    heading: 'LOAN PAYMENT SCHEDULE',
+    sectionTitle: 'INSTALLMENT SCHEDULE',
+    table: _scheduleTable(loan.installments, _blue, _paleBlue, _border),
+    note:
+        'This schedule shows the agreed dates and amounts for this loan. Check payment status and balances against the payment records.',
+  );
+
+  static Future<Uint8List> buildLedger(
+    LoanDetail loan, {
+    DateTime? generatedOn,
+  }) {
     final generated = generatedOn ?? DateTime.now();
-    final document = pw.Document(
-      title: 'Loan Schedule - ${loan.summary.borrowerName}',
-      author: 'Lending Manager',
-      subject: 'Installment schedule',
+    return _render(
+      loan,
+      generated: generated,
+      title: 'Payment Ledger - ${loan.summary.borrowerName}',
+      subject: 'Payment ledger',
+      heading: 'LOAN PAYMENT LEDGER',
+      sectionTitle: 'PAYMENT LEDGER',
+      balances: [
+        ('Opening balance', _money(loan.summary.totalCentavos)),
+        ('Total paid', _money(loan.paidCentavos)),
+        ('Balance', _money(loan.outstandingCentavos)),
+      ],
+      table: _ledgerTable(loan.ledgerRows(asOf: generated)),
+      note:
+          'This ledger reflects verified payments recorded as of ${formatPhilippineDate(generated)}. Pending, rejected, and reversed payments are not included.',
     );
-    final blue = PdfColor.fromHex('#1257B8');
-    final paleBlue = PdfColor.fromHex('#EAF2FF');
-    final border = PdfColor.fromHex('#C8D4E3');
+  }
+
+  static Future<Uint8List> _render(
+    LoanDetail loan, {
+    required DateTime generated,
+    required String title,
+    required String subject,
+    required String heading,
+    required String sectionTitle,
+    required pw.Widget table,
+    required String note,
+    List<(String, String)> balances = const [],
+  }) async {
+    final document = pw.Document(
+      title: title,
+      author: 'Lending Manager',
+      subject: subject,
+    );
+    final blue = _blue;
+    final paleBlue = _paleBlue;
+    final border = _border;
 
     document.addPage(
       pw.MultiPage(
+        theme: await _theme(),
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.fromLTRB(34, 32, 34, 32),
         header: (context) => pw.Container(
@@ -42,7 +92,7 @@ class LoanSchedulePdf {
                 ),
               ),
               pw.Text(
-                'LOAN PAYMENT SCHEDULE',
+                heading,
                 style: pw.TextStyle(
                   color: blue,
                   fontSize: 11,
@@ -82,9 +132,27 @@ class LoanSchedulePdf {
           _identity(loan, blue),
           pw.SizedBox(height: 16),
           _summary(loan, paleBlue, border),
+          if (balances.isNotEmpty) ...[
+            pw.SizedBox(height: 10),
+            pw.Container(
+              padding: const pw.EdgeInsets.all(12),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: border, width: .6),
+                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(5)),
+              ),
+              child: pw.Row(
+                children: [
+                  for (var i = 0; i < balances.length; i++) ...[
+                    if (i > 0) _divider(),
+                    _summaryValue(balances[i].$1, balances[i].$2),
+                  ],
+                ],
+              ),
+            ),
+          ],
           pw.SizedBox(height: 18),
           pw.Text(
-            'INSTALLMENT SCHEDULE',
+            sectionTitle,
             style: pw.TextStyle(
               color: blue,
               fontSize: 12,
@@ -92,7 +160,7 @@ class LoanSchedulePdf {
             ),
           ),
           pw.SizedBox(height: 8),
-          _scheduleTable(loan.installments, blue, paleBlue, border),
+          table,
           pw.SizedBox(height: 14),
           pw.Container(
             padding: const pw.EdgeInsets.all(10),
@@ -102,7 +170,7 @@ class LoanSchedulePdf {
               borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
             ),
             child: pw.Text(
-              'This schedule reflects the stored contractual dates and amounts for this loan. Payment status and balances must be verified against committed payment records.',
+              note,
               style: const pw.TextStyle(
                 fontSize: 8.5,
                 color: PdfColors.grey800,
@@ -254,6 +322,61 @@ class LoanSchedulePdf {
     ],
   );
 
+  static pw.Widget _ledgerTable(List<LedgerRow> rows) => pw.Table(
+    border: pw.TableBorder.all(color: _border, width: .55),
+    columnWidths: const {
+      0: pw.FixedColumnWidth(30),
+      1: pw.FlexColumnWidth(1.3),
+      2: pw.FlexColumnWidth(1.3),
+      3: pw.FlexColumnWidth(1.3),
+      4: pw.FlexColumnWidth(1.3),
+      5: pw.FlexColumnWidth(1.4),
+      6: pw.FlexColumnWidth(1),
+    },
+    children: [
+      pw.TableRow(
+        decoration: pw.BoxDecoration(color: _blue),
+        children: [
+          _headerCell('#'),
+          _headerCell('Due date'),
+          _headerCell('Amount due', right: true),
+          _headerCell('Payment date'),
+          _headerCell('Paid', right: true),
+          _headerCell('Ending balance', right: true),
+          _headerCell('Status'),
+        ],
+      ),
+      for (var index = 0; index < rows.length; index++)
+        pw.TableRow(
+          decoration: pw.BoxDecoration(
+            color: index.isOdd ? _paleBlue : PdfColors.white,
+          ),
+          children: [
+            _cell('${rows[index].installment.sequence}', center: true),
+            _cell(formatPhilippineDate(rows[index].installment.dueDate)),
+            _cell(_money(rows[index].installment.amountCentavos), right: true),
+            _cell(
+              rows[index].installment.lastPaymentAt == null
+                  ? '-'
+                  : formatPhilippineDate(
+                      rows[index].installment.lastPaymentAt!.toLocal(),
+                    ),
+            ),
+            _cell(_money(rows[index].installment.paidCentavos), right: true),
+            _cell(
+              _money(rows[index].endingBalanceCentavos),
+              right: true,
+              bold: true,
+            ),
+            _cell(_statusLabel(rows[index].status)),
+          ],
+        ),
+    ],
+  );
+
+  static String _statusLabel(String status) =>
+      status[0].toUpperCase() + status.substring(1);
+
   static pw.Widget _headerCell(String text, {bool right = false}) => pw.Padding(
     padding: const pw.EdgeInsets.symmetric(horizontal: 7, vertical: 7),
     child: pw.Text(
@@ -288,6 +411,22 @@ class LoanSchedulePdf {
     ),
   );
 
+  static pw.ThemeData? _cachedTheme;
+
+  /// Roboto is embedded so borrower names with ñ/accents and the peso
+  /// sign render; the PDF built-in Helvetica has no Unicode support.
+  static Future<pw.ThemeData> _theme() async {
+    final cached = _cachedTheme;
+    if (cached != null) return cached;
+    final regular = pw.Font.ttf(
+      await rootBundle.load('assets/fonts/Roboto-Regular.ttf'),
+    );
+    final bold = pw.Font.ttf(
+      await rootBundle.load('assets/fonts/Roboto-Bold.ttf'),
+    );
+    return _cachedTheme = pw.ThemeData.withFont(base: regular, bold: bold);
+  }
+
   static String _money(int centavos) {
     final value = (centavos / 100).toStringAsFixed(2);
     final parts = value.split('.');
@@ -295,7 +434,7 @@ class LoanSchedulePdf {
       RegExp(r'\B(?=(\d{3})+(?!\d))'),
       (_) => ',',
     );
-    return 'PHP $formatted.${parts.last}';
+    return '₱$formatted.${parts.last}';
   }
 
   static String _reference(String id) =>

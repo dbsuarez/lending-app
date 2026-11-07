@@ -70,3 +70,5 @@ supabase/.branches/
 *.keystore
 /flutter_*.png
 /docs/notes_la
+/.playwright-mcp/
+/build/

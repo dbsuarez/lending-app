@@ -2,14 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
-import 'package:printing/printing.dart';
+import '../../core/widgets/info_tip.dart';
 import '../../core/config/app_config.dart';
 import '../../core/formatting.dart';
+import '../../core/widgets/metric_grid.dart';
 import '../../core/widgets/app_status_badge.dart';
 import '../../domain/models/models.dart';
 import '../../domain/services/loan_calculator.dart';
-import '../documents/loan_schedule_pdf.dart';
+import '../../core/undo/undo_controller.dart';
+import '../documents/loan_print_menu.dart';
 import '../settings/operations_config_provider.dart';
+import 'extension_preview_dialog.dart';
 import 'loans_controller.dart';
 
 class LoanDetailScreen extends ConsumerStatefulWidget {
@@ -108,10 +111,6 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
               _LoanActivity(loan.summary.id),
               _LoanDocuments(
                 loan: loan,
-                onPrint: () => Printing.layoutPdf(
-                  name: '${_reference(loan.summary.id)}-schedule.pdf',
-                  onLayout: (_) => LoanSchedulePdf.build(loan),
-                ),
                 onCreateLink: () => _createShareLink(loan),
                 onManageLinks: () => _manageShareLinks(loan),
               ),
@@ -126,6 +125,7 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
     'borrower' when widget.borrowerId != null =>
       '/borrowers/${widget.borrowerId}',
     'personal' => '/personal-loans',
+    'dashboard' => '/dashboard',
     _ => '/loans',
   };
 
@@ -133,10 +133,16 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
     crossAxisAlignment: WrapCrossAlignment.center,
     children: [
       TextButton(
-        onPressed: () => context.go(_backPath),
+        // Root crumb goes to the section list; the borrower crumb below
+        // (when present) is the one that returns to the borrower profile.
+        onPressed: () => context.go(switch (widget.origin) {
+          'borrower' => '/borrowers',
+          _ => _backPath,
+        }),
         child: Text(switch (widget.origin) {
           'borrower' => 'Borrowers',
           'personal' => 'Personal Loans',
+          'dashboard' => 'Dashboard',
           _ => 'Loans',
         }),
       ),
@@ -173,14 +179,7 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
         ],
       );
       final utilityActions = <Widget>[
-        IconButton(
-          tooltip: 'Print loan schedule',
-          onPressed: () => Printing.layoutPdf(
-            name: '${_reference(loan.summary.id)}-schedule.pdf',
-            onLayout: (_) => LoanSchedulePdf.build(loan),
-          ),
-          icon: const Icon(Icons.picture_as_pdf_outlined),
-        ),
+        LoanPrintMenu(loadLoan: () async => loan),
         IconButton(
           tooltip: 'Create customer status link',
           onPressed: () => _createShareLink(loan),
@@ -205,27 +204,50 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
           ),
         ),
         if (loan.summary.status == 'active') ...[
-          OutlinedButton.icon(
-            onPressed: () => _amendDueDate(loan),
-            icon: const Icon(Icons.edit_calendar_outlined),
-            label: const Text('Amend Due Date'),
+          _explained(
+            'extension_preview',
+            OutlinedButton.icon(
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (_) => ExtensionPreviewDialog(loan),
+              ),
+              icon: const Icon(Icons.request_quote_outlined),
+              label: const Text('Preview Extension'),
+            ),
           ),
-          OutlinedButton.icon(
-            onPressed: () => _refinance(loan),
-            icon: const Icon(Icons.autorenew),
-            label: const Text('Refinance'),
+          _explained(
+            'amend_due_date',
+            OutlinedButton.icon(
+              onPressed: () => _amendDueDate(loan),
+              icon: const Icon(Icons.edit_calendar_outlined),
+              label: const Text('Change Due Date'),
+            ),
           ),
-          OutlinedButton.icon(
-            onPressed: () => _earlyPayoff(loan),
-            icon: const Icon(Icons.savings_outlined),
-            label: const Text('Early Payoff'),
+          _explained(
+            'refinance',
+            OutlinedButton.icon(
+              onPressed: () => _refinance(loan),
+              icon: const Icon(Icons.autorenew),
+              label: const Text('Refinance'),
+            ),
+          ),
+          _explained(
+            'early_payoff',
+            OutlinedButton.icon(
+              onPressed: () => _earlyPayoff(loan),
+              icon: const Icon(Icons.savings_outlined),
+              label: const Text('Early Payoff'),
+            ),
           ),
         ],
         if (loan.summary.status == 'draft') ...[
-          OutlinedButton.icon(
-            onPressed: () => _cancelDraft(loan),
-            icon: const Icon(Icons.cancel_outlined),
-            label: const Text('Cancel Draft'),
+          _explained(
+            'cancel_draft',
+            OutlinedButton.icon(
+              onPressed: () => _cancelDraft(loan),
+              icon: const Icon(Icons.cancel_outlined),
+              label: const Text('Cancel Draft'),
+            ),
           ),
           FilledButton.icon(
             onPressed: () => _activate(loan),
@@ -277,31 +299,111 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
             spacing: 6,
             runSpacing: 6,
             crossAxisAlignment: WrapCrossAlignment.center,
-            children: [...utilityActions, ...loanActions],
+            children: [
+              ...utilityActions,
+              ...loanActions,
+              TextButton.icon(
+                onPressed: () => _showActionGlossary(loan),
+                icon: const Icon(Icons.info_outline, size: 18),
+                label: const Text('What do these mean?'),
+              ),
+            ],
           ),
         ],
       );
     },
   );
 
-  Future<void> _setPersonal(LoanDetail loan) async {
-    final personal = !loan.summary.isPersonal;
-    final changed = await ref
-        .read(loansControllerProvider.notifier)
-        .setPersonal(loan.summary.id, personal);
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          changed
-              ? personal
-                    ? 'Loan moved to Personal Loans.'
-                    : 'Loan moved to Business Loans.'
-              : 'Loan classification could not be changed.',
+  UndoController get _undo => ref.read(undoControllerProvider.notifier);
+
+  /// Hover (desktop) or long-press (phone) shows the plain explanation.
+  Widget _explained(String term, Widget child) => Tooltip(
+    message: glossary[term]?.body ?? '',
+    waitDuration: const Duration(milliseconds: 500),
+    child: child,
+  );
+
+  void _showActionGlossary(LoanDetail loan) {
+    final terms = [
+      if (loan.summary.status == 'draft') ...['disburse', 'cancel_draft'],
+      if (loan.summary.status == 'active') ...[
+        'extension_preview',
+        'amend_due_date',
+        'consent_date',
+        'refinance',
+        'early_payoff',
+      ],
+      'mark_personal',
+      'customer_link',
+      'audit_history',
+    ];
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.8,
+          ),
+          child: ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            children: [
+              Text(
+                'What these actions mean',
+                style: Theme.of(sheetContext).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 8),
+              for (final term in terms)
+                if (glossary[term] case final entry?)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          entry.title,
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(entry.body),
+                      ],
+                    ),
+                  ),
+            ],
+          ),
         ),
       ),
     );
-    if (changed) _reload();
+  }
+
+  LoansController get _loans => ref.read(loansControllerProvider.notifier);
+
+  /// Wraps an undo call so this page refreshes if it is still open.
+  Future<bool> Function() _undoThenReload(Future<bool> Function() undo) =>
+      () async {
+        final undone = await undo();
+        if (undone && mounted) _reload();
+        return undone;
+      };
+
+  Future<void> _setPersonal(LoanDetail loan) async {
+    final loanId = loan.summary.id;
+    final personal = !loan.summary.isPersonal;
+    final changed = await _loans.setPersonal(loanId, personal);
+    if (!mounted) return;
+    if (changed) {
+      _undo.offer(
+        personal
+            ? 'Loan moved to Personal Loans.'
+            : 'Loan moved to Business Loans.',
+        _undoThenReload(() => _loans.setPersonal(loanId, !personal)),
+      );
+      _reload();
+    } else {
+      _undo.record('Loan classification could not be changed.');
+    }
   }
 
   Future<void> _activate(LoanDetail loan) async {
@@ -324,16 +426,18 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
           reference: values.reference,
         );
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          activated
-              ? 'Loan confirmed and disbursement recorded.'
-              : 'Loan could not be activated. Check the details and try again.',
-        ),
-      ),
-    );
-    if (activated) _reload();
+    if (activated) {
+      final loanId = loan.summary.id;
+      _undo.offer(
+        'Loan confirmed and money release recorded.',
+        _undoThenReload(() => _loans.undoActivation(loanId)),
+      );
+      _reload();
+    } else {
+      _undo.record(
+        'Loan could not be activated. Check the details and try again.',
+      );
+    }
   }
 
   Future<void> _cancelDraft(LoanDetail loan) async {
@@ -341,7 +445,7 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
     final reason = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Cancel draft loan?'),
+        title: const TitleWithInfo('Cancel draft loan?', 'cancel_draft'),
         content: TextField(
           controller: reasonController,
           autofocus: true,
@@ -373,14 +477,10 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
         .read(loansControllerProvider.notifier)
         .cancelDraft(loanId: loan.summary.id, reason: reason);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          cancelled
-              ? 'Draft loan cancelled and recorded in the audit history.'
-              : 'Draft loan could not be cancelled.',
-        ),
-      ),
+    _undo.record(
+      cancelled
+          ? 'Draft loan cancelled and recorded in the audit history.'
+          : 'Draft loan could not be cancelled.',
     );
     if (cancelled) _reload();
   }
@@ -392,9 +492,7 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
         .earlyPayoffQuote(loan.summary.id, date);
     if (!mounted) return;
     if (quote == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('The payoff quote could not be loaded.')),
-      );
+      _undo.notify('The payoff quote could not be loaded.');
       return;
     }
     final values = await showDialog<_PayoffValues>(
@@ -407,7 +505,7 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
       ),
     );
     if (values == null) return;
-    final saved = await ref
+    final paymentId = await ref
         .read(loansControllerProvider.notifier)
         .recordEarlyPayoff(
           loanId: loan.summary.id,
@@ -416,16 +514,15 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
           reference: values.reference,
         );
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          saved
-              ? 'Loan settled early; future unearned interest was waived.'
-              : 'Early payoff could not be recorded.',
-        ),
-      ),
-    );
-    if (saved) _reload();
+    if (paymentId != null) {
+      _undo.offer(
+        'Loan settled early; future unearned interest was waived.',
+        _undoThenReload(() => _loans.undoEarlyPayoff(paymentId)),
+      );
+      _reload();
+    } else {
+      _undo.record('Early payoff could not be recorded.');
+    }
   }
 
   Future<void> _amendDueDate(LoanDetail loan) async {
@@ -434,7 +531,7 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
       builder: (_) => _AmendmentDialog(loan.installments),
     );
     if (values == null) return;
-    final saved = await ref
+    final amendmentId = await ref
         .read(loansControllerProvider.notifier)
         .amendInstallmentDueDate(
           loanId: loan.summary.id,
@@ -444,16 +541,18 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
           consentDate: values.consentDate,
         );
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          saved
-              ? 'Due-date amendment saved with consent and audit history.'
-              : 'Amendment failed. Paid installments and invalid schedule order cannot be changed.',
-        ),
-      ),
-    );
-    if (saved) _reload();
+    if (amendmentId != null) {
+      _undo.offer(
+        'Due date changed. The change and consent are in the audit history.',
+        _undoThenReload(() => _loans.undoDueDateAmendment(amendmentId)),
+      );
+      _reload();
+    } else {
+      _undo.record(
+        'Due date could not be changed. Paid installments and dates out of '
+        'order cannot be changed.',
+      );
+    }
   }
 
   Future<void> _refinance(LoanDetail loan) async {
@@ -479,32 +578,27 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
         );
     if (!mounted) return;
     if (newId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Refinancing could not be created.')),
-      );
+      _undo.record('Refinancing could not be created.');
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Refinancing draft created with an auditable link to the original loan.',
-        ),
-      ),
-    );
+    _undo.record('Refinancing draft created and linked to the original loan.');
     context.go('/loans/$newId');
   }
 
   Future<void> _createShareLink(LoanDetail loan) async {
-    final token = await ref
+    final link = await ref
         .read(loansControllerProvider.notifier)
         .createShareLink(loan.summary.id);
     if (!mounted) return;
-    if (token == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Customer link could not be created.')),
-      );
+    if (link == null) {
+      _undo.record('Customer link could not be created.');
       return;
     }
+    final token = link.token;
+    _undo.offer(
+      'Customer status link created.',
+      () => _loans.revokeShareLink(link.id),
+    );
     final base = AppConfig.publicAppUrl.isEmpty
         ? Uri.base
         : Uri.parse(AppConfig.publicAppUrl);
@@ -514,7 +608,7 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Customer status link'),
+        title: const TitleWithInfo('Customer status link', 'customer_link'),
         content: SizedBox(
           width: 560,
           child: Column(
@@ -539,9 +633,7 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
               await Clipboard.setData(ClipboardData(text: url));
               if (dialogContext.mounted) Navigator.pop(dialogContext);
               if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Customer link copied.')),
-                );
+                _undo.notify('Customer link copied.');
               }
             },
             icon: const Icon(Icons.copy),
@@ -619,38 +711,66 @@ class _Overview extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListView(
-    padding: const EdgeInsets.all(24),
+    padding: EdgeInsets.all(MediaQuery.sizeOf(context).width < 600 ? 16 : 24),
     children: [
-      Wrap(
-        spacing: 12,
-        runSpacing: 12,
+      MetricGrid(
         children: [
-          _Metric('Principal', formatPeso(loan.summary.principalCentavos)),
-          _Metric(
+          MetricCard(
+            'Principal',
+            formatPeso(loan.summary.principalCentavos),
+            info: 'principal',
+          ),
+          MetricCard(
             'Flat interest',
             formatPeso(
               loan.summary.totalCentavos - loan.summary.principalCentavos,
             ),
+            info: 'flat_interest',
           ),
-          _Metric('Total repayable', formatPeso(loan.summary.totalCentavos)),
-          _Metric('Amount paid', formatPeso(loan.paidCentavos)),
-          _Metric('Still owed', formatPeso(loan.outstandingCentavos)),
-          _Metric(
+          MetricCard(
+            'Total repayable',
+            formatPeso(loan.summary.totalCentavos),
+            info: 'total_repayable',
+          ),
+          MetricCard('Amount paid', formatPeso(loan.paidCentavos)),
+          MetricCard(
+            'Still owed',
+            formatPeso(loan.outstandingCentavos),
+            info: 'still_owed',
+          ),
+          MetricCard(
             'Payment progress',
             loan.summary.totalCentavos == 0
                 ? '0.0%'
                 : '${(loan.paidCentavos * 100 / loan.summary.totalCentavos).toStringAsFixed(1)}%',
+            info: 'payment_progress',
           ),
-          _Metric(
+          MetricCard(
             'Installments paid',
             '${loan.installments.where((item) => item.paidCentavos >= item.amountCentavos).length} of ${loan.installments.length}',
+            info: 'installment',
           ),
-          _Metric('Term', '${loan.summary.termMonths} months'),
-          _Metric(
+          MetricCard('Term', '${loan.summary.termMonths} months', info: 'term'),
+          MetricCard(
             'Monthly rate',
             '${(loan.summary.monthlyRateBasisPoints / 100).toStringAsFixed(2)}%',
+            info: 'monthly_rate',
           ),
-          _Metric('Created', formatPhilippineDate(loan.summary.createdAt)),
+          MetricCard(
+            'Borrowed',
+            loan.summary.borrowedOn == null
+                ? 'Not released'
+                : formatPhilippineDate(loan.summary.borrowedOn!),
+            info: 'borrowed',
+          ),
+          MetricCard(
+            'Paid',
+            loan.summary.paidOn == null
+                ? 'Not paid'
+                : formatPhilippineDate(loan.summary.paidOn!),
+            info: 'paid_date',
+          ),
+          MetricCard('Created', formatPhilippineDate(loan.summary.createdAt)),
         ],
       ),
       const SizedBox(height: 20),
@@ -659,7 +779,7 @@ class _Overview extends StatelessWidget {
           leading: Icon(Icons.info_outline),
           title: Text('Financial state'),
           subtitle: Text(
-            'A draft has no recorded disbursement. Confirm & Disburse records the principal release and locks the agreed terms as an active loan.',
+            'No money has been released for this draft yet. Confirm & Disburse records that you released the money, and locks the agreed terms as an active loan.',
           ),
         ),
       ),
@@ -673,17 +793,7 @@ class _PaymentLedger extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    var runningBalance = loan.summary.totalCentavos;
-    final rows = <({Installment item, int endingBalance})>[];
-    for (final item in [
-      ...loan.installments,
-    ]..sort((a, b) => a.sequence.compareTo(b.sequence))) {
-      runningBalance = (runningBalance - item.paidCentavos).clamp(
-        0,
-        loan.summary.totalCentavos,
-      );
-      rows.add((item: item, endingBalance: runningBalance));
-    }
+    final rows = loan.ledgerRows();
     final totalPaid = loan.paidCentavos;
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -719,30 +829,24 @@ class _PaymentLedger extends StatelessWidget {
                   for (final row in rows)
                     DataRow(
                       cells: [
-                        DataCell(Text('${row.item.sequence}')),
-                        DataCell(Text(formatPhilippineDate(row.item.dueDate))),
+                        DataCell(Text('${row.installment.sequence}')),
+                        DataCell(
+                          Text(formatPhilippineDate(row.installment.dueDate)),
+                        ),
                         DataCell(
                           Text(
-                            row.item.lastPaymentAt == null
+                            row.installment.lastPaymentAt == null
                                 ? '—'
                                 : formatPhilippineDate(
-                                    row.item.lastPaymentAt!.toLocal(),
+                                    row.installment.lastPaymentAt!.toLocal(),
                                   ),
                           ),
                         ),
-                        DataCell(Text(formatPeso(row.item.paidCentavos))),
-                        DataCell(Text(formatPeso(row.endingBalance))),
                         DataCell(
-                          AppStatusBadge(
-                            row.item.paidCentavos >= row.item.amountCentavos
-                                ? 'paid'
-                                : row.item.paidCentavos > 0
-                                ? 'partial'
-                                : row.item.dueDate.isBefore(DateTime.now())
-                                ? 'overdue'
-                                : 'upcoming',
-                          ),
+                          Text(formatPeso(row.installment.paidCentavos)),
                         ),
+                        DataCell(Text(formatPeso(row.endingBalanceCentavos))),
+                        DataCell(AppStatusBadge(row.status)),
                       ],
                     ),
                 ],
@@ -753,39 +857,6 @@ class _PaymentLedger extends StatelessWidget {
       ),
     );
   }
-}
-
-class _Metric extends StatelessWidget {
-  const _Metric(this.label, this.value);
-  final String label, value;
-
-  @override
-  Widget build(BuildContext context) => SizedBox(
-    width: 220,
-    height: 92,
-    child: Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const Spacer(),
-            Text(
-              value,
-              textAlign: TextAlign.right,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
 }
 
 class _Schedule extends StatefulWidget {
@@ -977,27 +1048,42 @@ class _LoanActivity extends ConsumerWidget {
 class _LoanDocuments extends StatelessWidget {
   const _LoanDocuments({
     required this.loan,
-    required this.onPrint,
     required this.onCreateLink,
     required this.onManageLinks,
   });
   final LoanDetail loan;
-  final VoidCallback onPrint, onCreateLink, onManageLinks;
+  final VoidCallback onCreateLink, onManageLinks;
   @override
   Widget build(BuildContext context) => ListView(
     padding: const EdgeInsets.all(24),
     children: [
       Card(
         child: ListTile(
-          leading: const Icon(Icons.picture_as_pdf_outlined),
+          leading: const Icon(Icons.calendar_month_outlined),
           title: const Text('Loan schedule'),
           subtitle: const Text(
-            'Generate the A4 installment schedule for printing or saving as PDF.',
+            'A4 installment schedule for printing or saving as PDF.',
           ),
           trailing: FilledButton.icon(
-            onPressed: onPrint,
+            onPressed: () =>
+                printLoanDocument(loan, LoanPrintDocument.schedule),
             icon: const Icon(Icons.print_outlined),
-            label: const Text('Generate'),
+            label: const Text('Print'),
+          ),
+        ),
+      ),
+      const SizedBox(height: 8),
+      Card(
+        child: ListTile(
+          leading: const Icon(Icons.receipt_long_outlined),
+          title: const Text('Payment ledger'),
+          subtitle: const Text(
+            'A4 ledger of payments and running balance, for printing or saving as PDF.',
+          ),
+          trailing: FilledButton.icon(
+            onPressed: () => printLoanDocument(loan, LoanPrintDocument.ledger),
+            icon: const Icon(Icons.print_outlined),
+            label: const Text('Print'),
           ),
         ),
       ),
@@ -1074,7 +1160,7 @@ class _AmendmentDialogState extends State<_AmendmentDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Amend installment due date'),
+    title: const TitleWithInfo('Change a due date', 'amend_due_date'),
     content: SizedBox(
       width: 480,
       child: Column(
@@ -1117,7 +1203,7 @@ class _AmendmentDialogState extends State<_AmendmentDialog> {
           ),
           ListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Borrower consent date'),
+            title: const TitleWithInfo('Borrower consent date', 'consent_date'),
             subtitle: Text(formatPhilippineDate(consentDate)),
             trailing: const Icon(Icons.fact_check_outlined),
             onTap: () async {
@@ -1209,14 +1295,14 @@ class _RefinanceDialogState extends State<_RefinanceDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Create refinancing draft'),
+    title: const TitleWithInfo('Create refinancing draft', 'refinance'),
     content: SizedBox(
       width: 520,
       child: SingleChildScrollView(
         child: Column(
           children: [
             const Text(
-              'The original loan will be marked Refinanced. The replacement remains a draft until separately confirmed and disbursed.',
+              'The original loan will be marked Refinanced. The new loan stays a draft until you confirm it and release the money.',
             ),
             const SizedBox(height: 14),
             TextField(
@@ -1271,7 +1357,10 @@ class _RefinanceDialogState extends State<_RefinanceDialog> {
             ),
             ListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text('Borrower consent date'),
+              title: const TitleWithInfo(
+                'Borrower consent date',
+                'consent_date',
+              ),
               subtitle: Text(formatPhilippineDate(consentDate)),
               trailing: const Icon(Icons.fact_check_outlined),
               onTap: () async {
@@ -1358,7 +1447,7 @@ class _DisbursementDialogState extends State<_DisbursementDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Confirm and disburse loan'),
+    title: const TitleWithInfo('Confirm and disburse loan', 'disburse'),
     content: SizedBox(
       width: 480,
       child: Column(
@@ -1366,12 +1455,12 @@ class _DisbursementDialogState extends State<_DisbursementDialog> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'This records a ${formatPeso(widget.principalCentavos)} disbursement and activates the loan. Confirmed terms cannot be edited directly.',
+            'This records that you released ${formatPeso(widget.principalCentavos)} to the borrower and makes the loan active. After this, the terms are locked.',
           ),
           const SizedBox(height: 16),
           ListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Disbursement date'),
+            title: const Text('Date the money was released'),
             subtitle: Text(formatPhilippineDate(date)),
             trailing: const Icon(Icons.event_outlined),
             onTap: () async {
@@ -1444,7 +1533,7 @@ class _EarlyPayoffDialogState extends State<_EarlyPayoffDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Record early payoff'),
+    title: const TitleWithInfo('Record early payoff', 'early_payoff'),
     content: SizedBox(
       width: 500,
       child: Column(

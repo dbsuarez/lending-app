@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="color-scheme" content="light dark">
+  <title>Loan Status</title>
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <!--
+    Customer loan status page served at /s/<token> (see firebase.json).
+    Plain HTML so customers on slow phones load it instantly instead of the
+    full Flutter app. __SUPABASE_URL__ and __SUPABASE_ANON_KEY__ are filled in
+    by tool/build_web.ps1 after `flutter build web`; the anon key is the
+    public client key and only the two read-only, token-checked RPCs below
+    are callable with it.
+  -->
+  <style>
+    :root {
+      --bg: #f4f7ff; --card: #ffffff; --text: #15223b; --muted: #5b6b86;
+      --border: #dbe4f3; --primary: #1463f3; --primary-soft: #eaf1ff;
+      --paid: #157f3d; --paid-bg: #e6f6ec; --partial: #8a5a00; --partial-bg: #fff4d6;
+      --overdue: #b42318; --overdue-bg: #fdecea; --upcoming: #3b4a66; --upcoming-bg: #eef2f8;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0c1424; --card: #142038; --text: #e8eefb; --muted: #9fb0cc;
+        --border: #24345a; --primary: #5b9bff; --primary-soft: #1a2c52;
+        --paid: #6fdc98; --paid-bg: #12351f; --partial: #ffd27a; --partial-bg: #3a2e10;
+        --overdue: #ff8a80; --overdue-bg: #3d1614; --upcoming: #b9c6de; --upcoming-bg: #1d2a44;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      -webkit-text-size-adjust: 100%;
+    }
+    header {
+      background: linear-gradient(90deg, #287dff, #1463f3 55%, #0c1c45);
+      color: #fff; padding: 14px 16px;
+    }
+    header .inner, main { max-width: 760px; margin: 0 auto; }
+    header .inner { display: flex; align-items: center; gap: 12px; }
+    header h1 { font-size: 17px; margin: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    button.refresh {
+      background: rgba(255,255,255,.16); color: #fff; border: 1px solid rgba(255,255,255,.35);
+      border-radius: 999px; padding: 8px 14px; font: inherit; font-size: 14px; cursor: pointer; min-height: 40px;
+    }
+    main { padding: 16px; }
+    .hello { font-size: 22px; font-weight: 800; margin: 4px 0 2px; }
+    .sub { color: var(--muted); margin: 0 0 14px; }
+    .metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    @media (min-width: 640px) { .metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+    .metric {
+      background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+      padding: 12px; min-height: 78px; display: flex; flex-direction: column; justify-content: space-between;
+    }
+    .metric .label { font-size: 12.5px; color: var(--muted); }
+    .metric .value { font-size: 18px; font-weight: 800; text-align: right; font-variant-numeric: tabular-nums; }
+    .metric.balance { background: var(--primary-soft); border-color: var(--primary); }
+    .tabs { display: flex; gap: 6px; margin: 18px 0 10px; border-bottom: 1px solid var(--border); }
+    .tabs button {
+      flex: 1; background: none; border: 0; border-bottom: 3px solid transparent; color: var(--muted);
+      font: inherit; font-weight: 700; padding: 10px 6px; cursor: pointer; min-height: 44px;
+    }
+    .tabs button[aria-selected="true"] { color: var(--primary); border-bottom-color: var(--primary); }
+    .list { display: flex; flex-direction: column; gap: 8px; }
+    .row {
+      background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+      padding: 10px 12px; display: grid; grid-template-columns: auto 1fr auto; gap: 2px 12px; align-items: center;
+    }
+    .seq {
+      grid-row: span 2; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center;
+      background: var(--primary-soft); color: var(--primary); font-weight: 800; font-size: 14px;
+    }
+    .row .main { font-weight: 700; }
+    .row .amount { font-weight: 800; text-align: right; font-variant-numeric: tabular-nums; }
+    .row .meta { color: var(--muted); font-size: 13px; }
+    .row.no-seq { grid-template-columns: 1fr auto; }
+    .badge { justify-self: end; font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 999px; }
+    .badge.paid, .badge.verified, .badge.fully_paid { color: var(--paid); background: var(--paid-bg); }
+    .badge.partial, .badge.pending { color: var(--partial); background: var(--partial-bg); }
+    .badge.overdue { color: var(--overdue); background: var(--overdue-bg); }
+    .badge.upcoming, .badge.active, .badge.refinanced, .badge.cancelled, .badge.draft { color: var(--upcoming); background: var(--upcoming-bg); }
+    .empty, .notice { text-align: center; color: var(--muted); padding: 24px 12px; }
+    .notice.card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; margin-top: 24px; }
+    .notice .icon { font-size: 34px; display: block; margin-bottom: 6px; }
+    footer { color: var(--muted); font-size: 12px; text-align: center; padding: 18px 16px 28px; max-width: 760px; margin: 0 auto; }
+    [hidden] { display: none !important; }
+    .skeleton { height: 78px; border-radius: 14px; background: var(--card); border: 1px solid var(--border); opacity: .6; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="inner">
+      <h1 id="business">Loan Status</h1>
+      <button class="refresh" id="refresh" type="button" aria-label="Refresh loan status">Refresh</button>
+    </div>
+  </header>
+
+  <main>
+    <div id="loading" class="metrics" aria-busy="true" aria-label="Loading">
+      <div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>
+    </div>
+
+    <div id="error" class="notice card" hidden>
+      <span class="icon" aria-hidden="true">&#128279;</span>
+      <span id="error-text">This loan-status link is invalid or has been revoked.</span>
+    </div>
+
+    <section id="content" hidden>
+      <p class="hello" id="hello"></p>
+      <p class="sub" id="reference"></p>
+      <div class="metrics">
+        <div class="metric"><span class="label">Total repayable</span><span class="value" id="m-total"></span></div>
+        <div class="metric"><span class="label">Verified payments</span><span class="value" id="m-paid"></span></div>
+        <div class="metric"><span class="label">Pending verification</span><span class="value" id="m-pending"></span></div>
+        <div class="metric balance"><span class="label">Current balance</span><span class="value" id="m-balance"></span></div>
+      </div>
+
+      <div class="tabs" role="tablist">
+        <button type="button" role="tab" id="tab-schedule" aria-controls="schedule" aria-selected="true">Payment Schedule</button>
+        <button type="button" role="tab" id="tab-history" aria-controls="history" aria-selected="false">Payment History</button>
+      </div>
+      <div id="schedule" class="list" role="tabpanel" aria-labelledby="tab-schedule"></div>
+      <div id="history" class="list" role="tabpanel" aria-labelledby="tab-history" hidden></div>
+    </section>
+  </main>
+
+  <footer id="footer" hidden>
+    This read-only page remains available until the lender revokes its link.
+    Contact the lender if a payment or balance appears incorrect.
+  </footer>
+
+  <script>
+    (function () {
+      'use strict';
+      var SUPABASE_URL = '__SUPABASE_URL__';
+      var SUPABASE_ANON_KEY = '__SUPABASE_ANON_KEY__';
+
+      var $ = function (id) { return document.getElementById(id); };
+      var token = decodeURIComponent((location.pathname.match(/^\/s\/([^/?#]+)/) || [])[1] || '');
+
+      var peso = new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', minimumFractionDigits: 2 });
+      var money = function (centavos) { return peso.format((centavos || 0) / 100); };
+      var pad = function (n) { return String(n).padStart(2, '0'); };
+      // Same formats as the app (yyyy-MM-dd, yyyy-MM-dd HH:mm), in the viewer's local time.
+      var dateOnly = function (iso) { return String(iso).slice(0, 10); };
+      var dateTime = function (iso) {
+        var d = new Date(iso);
+        return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+      };
+      var label = function (value) {
+        return String(value || '').split('_').map(function (w) { return w ? w[0].toUpperCase() + w.slice(1) : w; }).join(' ');
+      };
+      var el = function (tag, className, text) {
+        var node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text != null) node.textContent = text;
+        return node;
+      };
+
+      function rpc(name) {
+        return fetch(SUPABASE_URL + '/rest/v1/rpc/' + name, {
+          method: 'POST',
+          headers: {
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: 'Bearer ' + SUPABASE_ANON_KEY,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ p_token: token }),
+          cache: 'no-store'
+        }).then(function (res) {
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          return res.json();
+        });
+      }
+
+      function showError(message) {
+        $('loading').hidden = true;
+        $('content').hidden = true;
+        $('footer').hidden = true;
+        $('error-text').textContent = message;
+        $('error').hidden = false;
+      }
+
+      function render(loan, businessName) {
+        if (businessName) {
+          $('business').textContent = businessName;
+          document.title = businessName + ' - Loan Status';
+        }
+        $('hello').textContent = 'Hello, ' + loan.borrower;
+        $('reference').textContent = loan.loan_reference + ' · ' + label(loan.loan_status);
+        $('m-total').textContent = money(loan.total_centavos);
+        $('m-paid').textContent = money(loan.verified_paid_centavos);
+        $('m-pending').textContent = money(loan.pending_centavos);
+        $('m-balance').textContent = money(loan.outstanding_centavos);
+
+        var schedule = $('schedule');
+        schedule.replaceChildren();
+        (loan.schedule || []).forEach(function (item) {
+          var row = el('div', 'row');
+          row.appendChild(el('span', 'seq', String(item.sequence)));
+          row.appendChild(el('span', 'main', dateOnly(item.due_date)));
+          row.appendChild(el('span', 'amount', money(item.scheduled_centavos)));
+          var paid = item.paid_centavos > 0 && item.status !== 'paid' ? ' · ' + money(item.paid_centavos) + ' paid' : '';
+          row.appendChild(el('span', 'meta', 'Due date' + paid));
+          row.appendChild(el('span', 'badge ' + item.status, label(item.status)));
+          schedule.appendChild(row);
+        });
+        if (!schedule.children.length) schedule.appendChild(el('p', 'empty', 'No schedule to display yet.'));
+
+        var history = $('history');
+        history.replaceChildren();
+        (loan.payments || []).forEach(function (item) {
+          var row = el('div', 'row no-seq');
+          row.appendChild(el('span', 'main', dateTime(item.received_at)));
+          row.appendChild(el('span', 'amount', money(item.amount_centavos)));
+          row.appendChild(el('span', 'meta', item.method));
+          row.appendChild(el('span', 'badge ' + item.status, label(item.status)));
+          history.appendChild(row);
+        });
+        if (!history.children.length) history.appendChild(el('p', 'empty', 'No payment records to display yet.'));
+
+        $('loading').hidden = true;
+        $('error').hidden = true;
+        $('content').hidden = false;
+        $('footer').hidden = false;
+      }
+
+      function load() {
+        if (token.length !== 64) {
+          showError('This loan-status link is invalid or has been revoked.');
+          return;
+        }
+        if (SUPABASE_URL.indexOf('__') === 0) {
+          showError('This page is not configured. Please contact the lender.');
+          return;
+        }
+        $('refresh').disabled = true;
+        Promise.all([rpc('get_shared_loan_status'), rpc('get_shared_business_name').catch(function () { return null; })])
+          .then(function (results) { render(results[0], results[1]); })
+          .catch(function (err) {
+            var offline = !navigator.onLine || err instanceof TypeError;
+            showError(offline
+              ? 'Could not reach the server. Check your connection and tap Refresh.'
+              : 'This loan-status link is invalid or has been revoked.');
+          })
+          .then(function () { $('refresh').disabled = false; });
+      }
+
+      function selectTab(showSchedule) {
+        $('tab-schedule').setAttribute('aria-selected', String(showSchedule));
+        $('tab-history').setAttribute('aria-selected', String(!showSchedule));
+        $('schedule').hidden = !showSchedule;
+        $('history').hidden = showSchedule;
+      }
+      $('tab-schedule').addEventListener('click', function () { selectTab(true); });
+      $('tab-history').addEventListener('click', function () { selectTab(false); });
+      $('refresh').addEventListener('click', load);
+      load();
+    })();
+  </script>
+</body>
+</html>

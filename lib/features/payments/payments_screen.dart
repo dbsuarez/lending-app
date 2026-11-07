@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/widgets/info_tip.dart';
 import '../../core/formatting.dart';
+import '../../core/undo/undo_controller.dart';
+import '../../core/widgets/responsive_card_list.dart';
 import '../../core/widgets/app_status_badge.dart';
 import '../../core/widgets/clearable_search_field.dart';
 import '../../domain/models/models.dart';
@@ -206,9 +209,8 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
     }
     return LayoutBuilder(
       builder: (context, constraints) => constraints.maxWidth < 760
-          ? ListView.separated(
+          ? ResponsiveCardList(
               itemCount: payments.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 8),
               itemBuilder: (_, index) => _PaymentCard(
                 payments[index],
                 onVerify: () => _verify(payments[index]),
@@ -288,28 +290,28 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
     );
     if (values == null) return;
     final loan = activeLoans.firstWhere((item) => item.id == values.loanId);
-    final saved = await ref
-        .read(paymentsControllerProvider.notifier)
-        .recordPending(
-          loan: loan,
-          amountCentavos: values.amountCentavos,
-          receivedAt: values.receivedAt,
-          method: values.method,
-          reference: values.reference,
-        );
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          saved
-              ? values.method == 'Cash'
-                    ? 'Cash payment verified and allocated automatically.'
-                    : 'Payment recorded as Pending Verification.'
-              : 'Payment could not be recorded. Try again.',
-        ),
-      ),
+    final payments = ref.read(paymentsControllerProvider.notifier);
+    final paymentId = await payments.recordPending(
+      loan: loan,
+      amountCentavos: values.amountCentavos,
+      receivedAt: values.receivedAt,
+      method: values.method,
+      reference: values.reference,
     );
+    if (!mounted) return;
+    if (paymentId != null) {
+      _undo.offer(
+        values.method == 'Cash'
+            ? 'Cash payment recorded and applied to the balance.'
+            : 'Payment recorded as Pending Verification.',
+        () => payments.undoRecord(paymentId),
+      );
+    } else {
+      _undo.record('Payment could not be recorded. Try again.');
+    }
   }
+
+  UndoController get _undo => ref.read(undoControllerProvider.notifier);
 
   Future<void> _reject(PaymentSummary payment) async {
     final reason = await showDialog<String>(
@@ -321,14 +323,10 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
         .read(paymentsControllerProvider.notifier)
         .reject(payment, reason);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          rejected
-              ? 'Payment rejected. The reason was recorded in the audit log.'
-              : 'Payment could not be rejected. Try again.',
-        ),
-      ),
+    _undo.record(
+      rejected
+          ? 'Payment rejected. The reason was recorded in the audit log.'
+          : 'Payment could not be rejected. Try again.',
     );
   }
 
@@ -357,9 +355,9 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Verify payment?'),
+        title: const TitleWithInfo('Verify payment?', 'verify'),
         content: Text(
-          'This will allocate ${formatPeso(payment.amountCentavos)} to the oldest unpaid installments, interest first then principal.',
+          'This confirms the money arrived and applies ${formatPeso(payment.amountCentavos)} to the oldest unpaid installments, interest first, then principal.',
         ),
         actions: [
           TextButton(
@@ -368,25 +366,23 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Verify and Allocate'),
+            child: const Text('Confirm Received'),
           ),
         ],
       ),
     );
     if (confirmed != true) return;
-    final saved = await ref
-        .read(paymentsControllerProvider.notifier)
-        .verify(payment);
+    final payments = ref.read(paymentsControllerProvider.notifier);
+    final saved = await payments.verify(payment);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          saved
-              ? 'Payment verified and allocated.'
-              : 'Payment verification failed.',
-        ),
-      ),
-    );
+    if (saved) {
+      _undo.offer(
+        'Payment confirmed and applied to the balance.',
+        () => payments.undoVerification(payment.id),
+      );
+    } else {
+      _undo.record('Payment verification failed.');
+    }
   }
 
   Future<void> _reverse(PaymentSummary payment) async {
@@ -402,14 +398,10 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
         .read(paymentsControllerProvider.notifier)
         .reverse(payment, reason);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          saved
-              ? 'Payment reversed with an audit record.'
-              : 'Payment reversal failed.',
-        ),
-      ),
+    _undo.record(
+      saved
+          ? 'Payment reversed with an audit record.'
+          : 'Payment reversal failed.',
     );
   }
 }
@@ -655,7 +647,7 @@ class _RejectPaymentDialogState extends State<_RejectPaymentDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Reject payment?'),
+    title: const TitleWithInfo('Reject payment?', 'reject'),
     content: Form(
       key: key,
       child: TextFormField(

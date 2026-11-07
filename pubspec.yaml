@@ -102,6 +102,9 @@ flutter:
 
   assets:
     - assets/branding/dashboard_duck.png
+    # Embedded in generated PDFs so names like Peña and the ₱ sign print.
+    - assets/fonts/Roboto-Regular.ttf
+    - assets/fonts/Roboto-Bold.ttf
 
   # To add assets to your application, add an assets section, like this:
   # assets:
