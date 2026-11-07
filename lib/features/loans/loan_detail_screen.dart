@@ -180,15 +180,26 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
       );
       final utilityActions = <Widget>[
         LoanPrintMenu(loadLoan: () async => loan),
-        IconButton(
-          tooltip: 'Get customer link',
-          onPressed: () => _createShareLink(loan),
-          icon: const Icon(Icons.link),
-        ),
-        IconButton(
-          tooltip: 'Manage customer links',
-          onPressed: () => _manageShareLinks(loan),
-          icon: const Icon(Icons.link_off),
+        // One button with a small menu instead of two icons, to save space.
+        MenuAnchor(
+          menuChildren: [
+            MenuItemButton(
+              leadingIcon: const Icon(Icons.link),
+              onPressed: () => _createShareLink(loan),
+              child: const Text('Get / copy link'),
+            ),
+            MenuItemButton(
+              leadingIcon: const Icon(Icons.manage_history_outlined),
+              onPressed: () => _manageShareLinks(loan),
+              child: const Text('Manage links'),
+            ),
+          ],
+          builder: (context, controller, _) => IconButton(
+            tooltip: 'Customer link',
+            onPressed: () =>
+                controller.isOpen ? controller.close() : controller.open(),
+            icon: const Icon(Icons.link),
+          ),
         ),
       ];
       final loanActions = <Widget>[
