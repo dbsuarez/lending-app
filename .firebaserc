@@ -1,0 +1,12 @@
+{
+  "projects": {
+    "default": "lending-manager-suarez"
+  },
+  "targets": {
+    "lending-manager-suarez": {
+      "hosting": {
+        "production": ["lending-manager-ph"]
+      }
+    }
+  }
+}

@@ -1,0 +1,307 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
+import 'package:flutter/foundation.dart';
+import '../../core/config/app_config.dart';
+import '../../data/repositories/demo_repository.dart';
+import '../../data/repositories/supabase_loans_repository.dart';
+import '../../domain/models/models.dart';
+
+final loansControllerProvider =
+    AsyncNotifierProvider<LoansController, List<LoanSummary>>(
+      LoansController.new,
+    );
+
+class LoansController extends AsyncNotifier<List<LoanSummary>> {
+  SupabaseLoansRepository? _repository;
+  final List<LoanSummary> _localLoans = [];
+  final Map<String, LoanQuote> _localQuotes = {};
+
+  bool get isLive =>
+      AppConfig.hasSupabase &&
+      Supabase.instance.client.auth.currentUser != null;
+
+  @override
+  Future<List<LoanSummary>> build() async {
+    if (!isLive) return List.unmodifiable(_localLoans);
+    _repository = SupabaseLoansRepository(Supabase.instance.client);
+    return _repository!.fetchLoans();
+  }
+
+  Future<void> refresh() async {
+    if (!isLive) return;
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() => _repository!.fetchLoans());
+  }
+
+  Future<bool> createDraft({
+    required Borrower borrower,
+    required LoanQuote quote,
+    required DateTime firstDueDate,
+    required List<int> paydayPattern,
+  }) async {
+    state = const AsyncLoading();
+    try {
+      final operationId = const Uuid().v4();
+      if (isLive) {
+        await _repository!.createDraft(
+          borrowerId: borrower.id,
+          quote: quote,
+          firstDueDate: firstDueDate,
+          paydayPattern: paydayPattern,
+          clientOperationId: operationId,
+        );
+        state = AsyncData(await _repository!.fetchLoans());
+      } else {
+        _localLoans.insert(
+          0,
+          LoanSummary(
+            id: operationId,
+            organizationId: demoOrganizationId,
+            borrowerId: borrower.id,
+            borrowerName: borrower.displayName,
+            principalCentavos: quote.principalCentavos,
+            totalCentavos: quote.totalCentavos,
+            monthlyRateBasisPoints: quote.monthlyRateBasisPoints,
+            termMonths: quote.termMonths,
+            status: 'draft',
+            createdAt: DateTime.now(),
+            isPersonal: false,
+          ),
+        );
+        _localQuotes[operationId] = quote;
+        state = AsyncData(List.unmodifiable(_localLoans));
+      }
+      return true;
+    } catch (error, stackTrace) {
+      state = AsyncError<List<LoanSummary>>(error, stackTrace);
+      return false;
+    }
+  }
+
+  Future<LoanDetail> fetchDetail(String id) async {
+    if (isLive) return _repository!.fetchLoan(id);
+    final summary = _localLoans.firstWhere((loan) => loan.id == id);
+    final quote = _localQuotes[id]!;
+    return LoanDetail(summary: summary, installments: quote.installments);
+  }
+
+  Future<bool> activate({
+    required String loanId,
+    required DateTime disbursedOn,
+    required String method,
+    required String reference,
+  }) async {
+    try {
+      if (isLive) {
+        await _repository!.activate(
+          loanId: loanId,
+          disbursedOn: disbursedOn,
+          method: method,
+          reference: reference,
+          clientOperationId: const Uuid().v4(),
+        );
+        state = AsyncData(await _repository!.fetchLoans());
+      } else {
+        final index = _localLoans.indexWhere((loan) => loan.id == loanId);
+        final old = _localLoans[index];
+        _localLoans[index] = LoanSummary(
+          id: old.id,
+          organizationId: old.organizationId,
+          borrowerId: old.borrowerId,
+          borrowerName: old.borrowerName,
+          principalCentavos: old.principalCentavos,
+          totalCentavos: old.totalCentavos,
+          monthlyRateBasisPoints: old.monthlyRateBasisPoints,
+          termMonths: old.termMonths,
+          status: 'active',
+          createdAt: old.createdAt,
+          isPersonal: old.isPersonal,
+        );
+        state = AsyncData(List.unmodifiable(_localLoans));
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<String?> createShareLink(String loanId) async {
+    if (!isLive) return 'local-demo-$loanId';
+    try {
+      return await _repository!.createShareLink(loanId: loanId);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<List<LoanShareLinkSummary>> fetchShareLinks(String loanId) async {
+    if (!isLive) return const [];
+    return _repository!.fetchShareLinks(loanId);
+  }
+
+  Future<bool> revokeShareLink(String linkId) async {
+    if (!isLive) return true;
+    try {
+      await _repository!.revokeShareLink(linkId);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> cancelDraft({
+    required String loanId,
+    required String reason,
+  }) async {
+    try {
+      if (isLive) {
+        await _repository!.cancelDraft(loanId: loanId, reason: reason);
+        state = AsyncData(await _repository!.fetchLoans());
+      } else {
+        final index = _localLoans.indexWhere((loan) => loan.id == loanId);
+        if (index < 0 || _localLoans[index].status != 'draft') return false;
+        final old = _localLoans[index];
+        _localLoans[index] = LoanSummary(
+          id: old.id,
+          organizationId: old.organizationId,
+          borrowerId: old.borrowerId,
+          borrowerName: old.borrowerName,
+          principalCentavos: old.principalCentavos,
+          totalCentavos: old.totalCentavos,
+          monthlyRateBasisPoints: old.monthlyRateBasisPoints,
+          termMonths: old.termMonths,
+          status: 'cancelled',
+          createdAt: old.createdAt,
+          isPersonal: old.isPersonal,
+        );
+        state = AsyncData(List.unmodifiable(_localLoans));
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<List<PaymentSummary>> fetchLoanPayments(String loanId) async {
+    if (!isLive) return const [];
+    return _repository!.fetchLoanPayments(loanId);
+  }
+
+  Future<bool> setPersonal(String loanId, bool personal) async {
+    try {
+      if (isLive) {
+        await _repository!.setPersonal(loanId: loanId, personal: personal);
+        state = AsyncData(await _repository!.fetchLoans());
+      } else {
+        final index = _localLoans.indexWhere((loan) => loan.id == loanId);
+        if (index < 0) return false;
+        final old = _localLoans[index];
+        _localLoans[index] = LoanSummary(
+          id: old.id,
+          organizationId: old.organizationId,
+          borrowerId: old.borrowerId,
+          borrowerName: old.borrowerName,
+          principalCentavos: old.principalCentavos,
+          totalCentavos: old.totalCentavos,
+          monthlyRateBasisPoints: old.monthlyRateBasisPoints,
+          termMonths: old.termMonths,
+          status: old.status,
+          createdAt: old.createdAt,
+          isPersonal: personal,
+        );
+        state = AsyncData(List.unmodifiable(_localLoans));
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> amendInstallmentDueDate({
+    required String loanId,
+    required int sequence,
+    required DateTime newDueDate,
+    required String reason,
+    required DateTime consentDate,
+  }) async {
+    if (!isLive) return false;
+    try {
+      await _repository!.amendInstallmentDueDate(
+        loanId: loanId,
+        sequence: sequence,
+        newDueDate: newDueDate,
+        reason: reason,
+        consentDate: consentDate,
+        clientOperationId: const Uuid().v4(),
+      );
+      state = AsyncData(await _repository!.fetchLoans());
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<String?> refinance({
+    required String sourceLoanId,
+    required LoanQuote quote,
+    required String reason,
+    required DateTime consentDate,
+  }) async {
+    if (!isLive) return null;
+    try {
+      final id = await _repository!.refinance(
+        sourceLoanId: sourceLoanId,
+        quote: quote,
+        reason: reason,
+        consentDate: consentDate,
+        clientOperationId: const Uuid().v4(),
+      );
+      state = AsyncData(await _repository!.fetchLoans());
+      return id;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<List<AuditEventSummary>> fetchLoanActivity(String loanId) async {
+    if (!isLive) return const [];
+    return _repository!.fetchLoanActivity(loanId);
+  }
+
+  Future<EarlyPayoffQuote?> earlyPayoffQuote(
+    String loanId,
+    DateTime date,
+  ) async {
+    if (!isLive) return null;
+    try {
+      return await _repository!.earlyPayoffQuote(loanId, date);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<bool> recordEarlyPayoff({
+    required String loanId,
+    required DateTime date,
+    required String method,
+    required String reference,
+  }) async {
+    if (!isLive) return false;
+    try {
+      final userId = Supabase.instance.client.auth.currentUser!.id;
+      await _repository!.recordEarlyPayoff(
+        loanId: loanId,
+        date: date,
+        method: method,
+        reference: reference,
+        clientOperationId: const Uuid().v4(),
+        deviceId: '${kIsWeb ? 'web' : 'android'}-$userId',
+      );
+      state = AsyncData(await _repository!.fetchLoans());
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+}
