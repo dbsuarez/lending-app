@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
+import '../../app/data_refresh.dart';
 import '../../core/config/app_config.dart';
 import '../../data/repositories/supabase_payments_repository.dart';
 import '../../domain/models/models.dart';
@@ -30,6 +31,13 @@ class PaymentsController extends AsyncNotifier<List<PaymentSummary>> {
     if (!isLive) return;
     state = const AsyncLoading();
     state = await AsyncValue.guard(() => _repository!.fetchPayments());
+  }
+
+  /// After a change: reload this list, then everything derived from it
+  /// (loan status, Ongoing tags, Collections, Dashboard).
+  Future<void> _reloadAll() async {
+    state = AsyncData(await _repository!.fetchPayments());
+    refreshMoneyViews(ref, payments: false);
   }
 
   /// See LoansController._initialBuild: demo-mode inserts must wait for the
@@ -63,7 +71,7 @@ class PaymentsController extends AsyncNotifier<List<PaymentSummary>> {
           clientOperationId: id,
           deviceId: '${kIsWeb ? 'web' : 'android'}-$userId',
         );
-        state = AsyncData(await _repository!.fetchPayments());
+        await _reloadAll();
         return saved;
       } else {
         _localPayments.insert(
@@ -93,7 +101,7 @@ class PaymentsController extends AsyncNotifier<List<PaymentSummary>> {
     try {
       if (isLive) {
         await _repository!.reject(paymentId: payment.id, reason: reason);
-        state = AsyncData(await _repository!.fetchPayments());
+        await _reloadAll();
       } else {
         final index = _localPayments.indexWhere(
           (item) => item.id == payment.id,
@@ -121,7 +129,7 @@ class PaymentsController extends AsyncNotifier<List<PaymentSummary>> {
     try {
       if (isLive) {
         await _repository!.verify(payment.id);
-        state = AsyncData(await _repository!.fetchPayments());
+        await _reloadAll();
       } else {
         _replaceLocal(payment, 'verified');
       }
@@ -135,7 +143,7 @@ class PaymentsController extends AsyncNotifier<List<PaymentSummary>> {
     try {
       if (isLive) {
         await _repository!.reverse(paymentId: payment.id, reason: reason);
-        state = AsyncData(await _repository!.fetchPayments());
+        await _reloadAll();
       } else {
         _replaceLocal(payment, 'reversed');
       }
@@ -169,7 +177,7 @@ class PaymentsController extends AsyncNotifier<List<PaymentSummary>> {
           reference: reference,
           reason: reason,
         );
-        state = AsyncData(await _repository!.fetchPayments());
+        await _reloadAll();
         return id;
       }
       await _initialBuild();
@@ -203,7 +211,7 @@ class PaymentsController extends AsyncNotifier<List<PaymentSummary>> {
     try {
       if (isLive) {
         await _repository!.undoCorrection(correctionId);
-        state = AsyncData(await _repository!.fetchPayments());
+        await _reloadAll();
         return true;
       }
       final paymentId = correctionId.replaceFirst('local-', '');
@@ -262,6 +270,7 @@ class PaymentsController extends AsyncNotifier<List<PaymentSummary>> {
     }
     if (isLive) {
       state = await AsyncValue.guard(() => _repository!.fetchPayments());
+      refreshMoneyViews(ref, payments: false);
     }
     return verified;
   }
@@ -288,6 +297,7 @@ class PaymentsController extends AsyncNotifier<List<PaymentSummary>> {
     }
     if (isLive) {
       state = await AsyncValue.guard(() => _repository!.fetchPayments());
+      refreshMoneyViews(ref, payments: false);
     }
     return allUndone;
   }
@@ -314,7 +324,7 @@ class PaymentsController extends AsyncNotifier<List<PaymentSummary>> {
     try {
       if (isLive) {
         await live();
-        state = AsyncData(await _repository!.fetchPayments());
+        await _reloadAll();
         return true;
       }
       await _initialBuild();

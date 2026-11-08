@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import 'package:flutter/foundation.dart';
+import '../../app/data_refresh.dart';
 import '../../core/config/app_config.dart';
 import '../../data/repositories/demo_repository.dart';
 import '../../data/repositories/supabase_loans_repository.dart';
@@ -35,6 +36,12 @@ class LoansController extends AsyncNotifier<List<LoanSummary>> {
     state = await AsyncValue.guard(() => _repository!.fetchLoans());
   }
 
+  /// After a change: reload this list, then everything derived from it.
+  Future<void> _reloadAll() async {
+    state = AsyncData(await _repository!.fetchLoans());
+    refreshMoneyViews(ref, loans: false);
+  }
+
   /// Demo-mode mutators must wait for the first async build; otherwise a
   /// build that finishes after the mutation overwrites it with the stale
   /// (empty) list it captured. Happens when a screen's first use of this
@@ -66,7 +73,7 @@ class LoansController extends AsyncNotifier<List<LoanSummary>> {
           paydayPattern: paydayPattern,
           clientOperationId: operationId,
         );
-        state = AsyncData(await _repository!.fetchLoans());
+        await _reloadAll();
       } else {
         _localLoans.insert(
           0,
@@ -116,7 +123,7 @@ class LoansController extends AsyncNotifier<List<LoanSummary>> {
           reference: reference,
           clientOperationId: const Uuid().v4(),
         );
-        state = AsyncData(await _repository!.fetchLoans());
+        await _reloadAll();
       } else {
         await _initialBuild();
         final index = _localLoans.indexWhere((loan) => loan.id == loanId);
@@ -173,7 +180,7 @@ class LoansController extends AsyncNotifier<List<LoanSummary>> {
     try {
       if (isLive) {
         await _repository!.cancelDraft(loanId: loanId, reason: reason);
-        state = AsyncData(await _repository!.fetchLoans());
+        await _reloadAll();
       } else {
         await _initialBuild();
         final index = _localLoans.indexWhere((loan) => loan.id == loanId);
@@ -197,7 +204,7 @@ class LoansController extends AsyncNotifier<List<LoanSummary>> {
     try {
       if (isLive) {
         await _repository!.setPersonal(loanId: loanId, personal: personal);
-        state = AsyncData(await _repository!.fetchLoans());
+        await _reloadAll();
       } else {
         await _initialBuild();
         final index = _localLoans.indexWhere((loan) => loan.id == loanId);
@@ -230,7 +237,7 @@ class LoansController extends AsyncNotifier<List<LoanSummary>> {
         consentDate: consentDate,
         clientOperationId: const Uuid().v4(),
       );
-      state = AsyncData(await _repository!.fetchLoans());
+      await _reloadAll();
       return id;
     } catch (_) {
       return null;
@@ -252,7 +259,7 @@ class LoansController extends AsyncNotifier<List<LoanSummary>> {
         consentDate: consentDate,
         clientOperationId: const Uuid().v4(),
       );
-      state = AsyncData(await _repository!.fetchLoans());
+      await _reloadAll();
       return id;
     } catch (_) {
       return null;
@@ -294,7 +301,7 @@ class LoansController extends AsyncNotifier<List<LoanSummary>> {
         clientOperationId: const Uuid().v4(),
         deviceId: '${kIsWeb ? 'web' : 'android'}-$userId',
       );
-      state = AsyncData(await _repository!.fetchLoans());
+      await _reloadAll();
       return id;
     } catch (_) {
       return null;
@@ -344,7 +351,7 @@ class LoansController extends AsyncNotifier<List<LoanSummary>> {
         reason: reason,
         clientOperationId: const Uuid().v4(),
       );
-      state = AsyncData(await _repository!.fetchLoans());
+      await _reloadAll();
       return id;
     }
     await _initialBuild();
@@ -388,7 +395,7 @@ class LoansController extends AsyncNotifier<List<LoanSummary>> {
         reason: reason,
         clientOperationId: const Uuid().v4(),
       );
-      state = AsyncData(await _repository!.fetchLoans());
+      await _reloadAll();
       return id;
     }
     await _initialBuild();
@@ -460,7 +467,7 @@ class LoansController extends AsyncNotifier<List<LoanSummary>> {
     try {
       if (isLive) {
         await live();
-        state = AsyncData(await _repository!.fetchLoans());
+        await _reloadAll();
         return true;
       }
       await _initialBuild();
