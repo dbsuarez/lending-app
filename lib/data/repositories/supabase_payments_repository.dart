@@ -71,6 +71,31 @@ class SupabasePaymentsRepository {
         params: {'p_payment_id': paymentId, 'p_reason': reason},
       );
 
+  /// Returns the correction id (see 202611070035_payment_corrections.sql).
+  Future<String> correctDetails({
+    required String paymentId,
+    required DateTime receivedAt,
+    required String method,
+    required String reference,
+    required String reason,
+  }) async =>
+      await _client.rpc(
+            'correct_payment_details',
+            params: {
+              'p_payment_id': paymentId,
+              'p_received_at': receivedAt.toUtc().toIso8601String(),
+              'p_method': method,
+              'p_reference': reference,
+              'p_reason': reason,
+            },
+          )
+          as String;
+
+  Future<void> undoCorrection(String correctionId) => _client.rpc(
+    'undo_payment_correction',
+    params: {'p_correction_id': correctionId},
+  );
+
   // Undo (see migration 202611070033_transaction_undo.sql).
   Future<void> undoRecord(String paymentId) =>
       _client.rpc('undo_payment_record', params: {'p_payment_id': paymentId});

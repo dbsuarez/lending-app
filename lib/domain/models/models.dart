@@ -146,6 +146,22 @@ class ReceivedPayment {
   }
 }
 
+/// What the edit form needs beyond [LoanDetail]: the payday pattern, first
+/// due date and the money-release record (null for drafts).
+class LoanEditTerms {
+  const LoanEditTerms({
+    required this.firstDueDate,
+    required this.paydayPattern,
+    this.disbursedOn,
+    this.method,
+    this.reference,
+  });
+  final DateTime firstDueDate;
+  final List<int> paydayPattern;
+  final DateTime? disbursedOn;
+  final String? method, reference;
+}
+
 class LoanDetail {
   const LoanDetail({
     required this.summary,

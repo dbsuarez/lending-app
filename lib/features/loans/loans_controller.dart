@@ -301,6 +301,121 @@ class LoansController extends AsyncNotifier<List<LoanSummary>> {
     }
   }
 
+  // ---- Corrections ----
+
+  Future<LoanEditTerms> fetchEditTerms(String loanId) async {
+    if (isLive) return _repository!.fetchEditTerms(loanId);
+    await _initialBuild();
+    final quote = _localQuotes[loanId]!;
+    final summary = _localLoans.firstWhere((loan) => loan.id == loanId);
+    return LoanEditTerms(
+      firstDueDate: quote.installments.first.dueDate,
+      paydayPattern: {
+        for (final item in quote.installments.take(2)) item.dueDate.day,
+      }.toList()..sort(),
+      disbursedOn: summary.borrowedOn,
+      method: summary.borrowedOn == null ? null : 'Cash',
+    );
+  }
+
+  /// Edits a draft or corrects an active loan without payments. Returns the
+  /// amendment id for undo; throws with the server's message on failure.
+  Future<String> correctLoan({
+    required LoanSummary loan,
+    required Borrower borrower,
+    required LoanQuote quote,
+    required DateTime firstDueDate,
+    required List<int> paydayPattern,
+    DateTime? disbursedOn,
+    String? method,
+    String? reference,
+    required String reason,
+  }) async {
+    if (isLive) {
+      final id = await _repository!.correctLoan(
+        loanId: loan.id,
+        borrowerId: borrower.id,
+        quote: quote,
+        firstDueDate: firstDueDate,
+        paydayPattern: paydayPattern,
+        disbursedOn: disbursedOn,
+        method: method,
+        reference: reference,
+        reason: reason,
+        clientOperationId: const Uuid().v4(),
+      );
+      state = AsyncData(await _repository!.fetchLoans());
+      return id;
+    }
+    await _initialBuild();
+    final index = _localLoans.indexWhere((item) => item.id == loan.id);
+    final old = _localLoans[index];
+    _localUndo[loan.id] = (old, _localQuotes[loan.id]!);
+    _localLoans[index] = LoanSummary(
+      id: old.id,
+      organizationId: old.organizationId,
+      borrowerId: borrower.id,
+      borrowerName: borrower.displayName,
+      principalCentavos: quote.principalCentavos,
+      totalCentavos: quote.totalCentavos,
+      monthlyRateBasisPoints: quote.monthlyRateBasisPoints,
+      termMonths: quote.termMonths,
+      status: old.status,
+      createdAt: old.createdAt,
+      isPersonal: old.isPersonal,
+      borrowedOn: old.borrowedOn == null ? null : disbursedOn ?? old.borrowedOn,
+    );
+    _localQuotes[loan.id] = quote;
+    state = AsyncData(List.unmodifiable(_localLoans));
+    return 'local-${loan.id}';
+  }
+
+  /// Fixes the money-release date, method or reference. Returns the
+  /// amendment id for undo; throws with the server's message on failure.
+  Future<String> correctDisbursement({
+    required String loanId,
+    required DateTime disbursedOn,
+    required String method,
+    required String reference,
+    required String reason,
+  }) async {
+    if (isLive) {
+      final id = await _repository!.correctDisbursement(
+        loanId: loanId,
+        disbursedOn: disbursedOn,
+        method: method,
+        reference: reference,
+        reason: reason,
+        clientOperationId: const Uuid().v4(),
+      );
+      state = AsyncData(await _repository!.fetchLoans());
+      return id;
+    }
+    await _initialBuild();
+    final index = _localLoans.indexWhere((item) => item.id == loanId);
+    final old = _localLoans[index];
+    _localUndo[loanId] = (old, _localQuotes[loanId]!);
+    _localLoans[index] = old.copyWith(borrowedOn: disbursedOn);
+    state = AsyncData(List.unmodifiable(_localLoans));
+    return 'local-$loanId';
+  }
+
+  Future<bool> undoLoanCorrection(String amendmentId) => _undo(
+    live: () => _repository!.undoLoanCorrection(amendmentId),
+    local: () {
+      final loanId = amendmentId.replaceFirst('local-', '');
+      final previous = _localUndo.remove(loanId);
+      final index = _localLoans.indexWhere((loan) => loan.id == loanId);
+      if (previous == null || index < 0) return false;
+      _localLoans[index] = previous.$1;
+      _localQuotes[loanId] = previous.$2;
+      return true;
+    },
+  );
+
+  /// Demo mode: what each loan looked like before its last correction.
+  final Map<String, (LoanSummary, LoanQuote)> _localUndo = {};
+
   // ---- Undo (single level; see UndoController) ----
 
   Future<bool> undoCreateDraft(String loanId) =>
@@ -323,6 +438,15 @@ class LoansController extends AsyncNotifier<List<LoanSummary>> {
     live: () => _repository!.undoDueDateAmendment(amendmentId),
     local: () => false,
   );
+
+  Future<String?> fetchEarlyPayoffPaymentId(String loanId) async {
+    if (!isLive) return null;
+    try {
+      return await _repository!.fetchEarlyPayoffPaymentId(loanId);
+    } catch (_) {
+      return null;
+    }
+  }
 
   Future<bool> undoEarlyPayoff(String paymentId) => _undo(
     live: () => _repository!.undoEarlyPayoff(paymentId),

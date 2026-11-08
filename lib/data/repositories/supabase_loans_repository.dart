@@ -349,6 +349,122 @@ class SupabaseLoansRepository {
           )
           as String;
 
+  // Corrections (see migration 202611070036_loan_corrections.sql).
+
+  Future<LoanEditTerms> fetchEditTerms(String loanId) async {
+    final row = await _client
+        .from('loans')
+        .select(
+          'terms_snapshot, '
+          'installments(sequence,due_date), '
+          'disbursement:loan_disbursements(disbursed_on,method,reference,voided_at)',
+        )
+        .eq('organization_id', await organizationId())
+        .eq('id', loanId)
+        .single();
+    final snapshot = Map<String, dynamic>.from(
+      (row['terms_snapshot'] as Map?) ?? const {},
+    );
+    final installments = [
+      for (final item in (row['installments'] as List? ?? const []))
+        Map<String, dynamic>.from(item as Map),
+    ]..sort((a, b) => (a['sequence'] as int).compareTo(b['sequence'] as int));
+    final firstDue =
+        snapshot['first_due_date'] as String? ??
+        installments.firstOrNull?['due_date'] as String?;
+    final pattern =
+        (snapshot['payday_pattern'] as List?)
+            ?.map((day) => (day as num).toInt())
+            .toList() ??
+        [
+          for (final item in installments.take(2))
+            DateTime.parse(item['due_date'] as String).day,
+        ];
+    final raw = row['disbursement'];
+    final disbursement = (raw is List ? raw.cast<Map>() : [if (raw is Map) raw])
+        .where((item) => item['voided_at'] == null)
+        .firstOrNull;
+    return LoanEditTerms(
+      firstDueDate: DateTime.parse(firstDue!),
+      paydayPattern: pattern.toSet().toList()..sort(),
+      disbursedOn: disbursement == null
+          ? null
+          : DateTime.parse(disbursement['disbursed_on'] as String),
+      method: disbursement?['method'] as String?,
+      reference: disbursement?['reference'] as String?,
+    );
+  }
+
+  /// Edits a draft, or corrects an active loan with no payments. Returns the
+  /// amendment id (for undo).
+  Future<String> correctLoan({
+    required String loanId,
+    required String borrowerId,
+    required LoanQuote quote,
+    required DateTime firstDueDate,
+    required List<int> paydayPattern,
+    DateTime? disbursedOn,
+    String? method,
+    String? reference,
+    required String reason,
+    required String clientOperationId,
+  }) async =>
+      await _client.rpc(
+            'correct_loan',
+            params: {
+              'p_loan_id': loanId,
+              'p_borrower_id': borrowerId,
+              'p_principal_centavos': quote.principalCentavos,
+              'p_monthly_rate_basis_points': quote.monthlyRateBasisPoints,
+              'p_term_months': quote.termMonths,
+              'p_first_due_date': _date(firstDueDate),
+              'p_payday_pattern': paydayPattern,
+              'p_installments': [
+                for (final installment in quote.installments)
+                  {
+                    'sequence': installment.sequence,
+                    'due_date': _date(installment.dueDate),
+                    'principal_centavos': installment.principalCentavos,
+                    'interest_centavos': installment.interestCentavos,
+                    'scheduled_centavos': installment.amountCentavos,
+                  },
+              ],
+              'p_disbursed_on': disbursedOn == null ? null : _date(disbursedOn),
+              'p_method': method,
+              'p_reference': reference,
+              'p_reason': reason,
+              'p_client_operation_id': clientOperationId,
+            },
+          )
+          as String;
+
+  /// Returns the amendment id (for undo).
+  Future<String> correctDisbursement({
+    required String loanId,
+    required DateTime disbursedOn,
+    required String method,
+    required String reference,
+    required String reason,
+    required String clientOperationId,
+  }) async =>
+      await _client.rpc(
+            'correct_disbursement',
+            params: {
+              'p_loan_id': loanId,
+              'p_disbursed_on': _date(disbursedOn),
+              'p_method': method,
+              'p_reference': reference,
+              'p_reason': reason,
+              'p_client_operation_id': clientOperationId,
+            },
+          )
+          as String;
+
+  Future<void> undoLoanCorrection(String amendmentId) => _client.rpc(
+    'undo_loan_correction',
+    params: {'p_amendment_id': amendmentId},
+  );
+
   // Undo (see migration 202611070033_transaction_undo.sql).
   Future<void> undoActivation(String loanId) =>
       _client.rpc('undo_loan_activation', params: {'p_loan_id': loanId});
@@ -357,6 +473,28 @@ class SupabaseLoansRepository {
     'undo_due_date_amendment',
     params: {'p_amendment_id': amendmentId},
   );
+
+  /// The settlement payment of this loan's early payoff, if it is still in
+  /// effect (verified); null otherwise.
+  Future<String?> fetchEarlyPayoffPaymentId(String loanId) async {
+    final rows = await _client
+        .from('audit_events')
+        .select('payload, created_at')
+        .eq('organization_id', await organizationId())
+        .eq('action', 'loan_settled_early')
+        .eq('record_id', loanId)
+        .order('created_at', ascending: false)
+        .limit(1);
+    if (rows.isEmpty) return null;
+    final paymentId = (rows.first['payload'] as Map)['payment_id'] as String?;
+    if (paymentId == null) return null;
+    final payment = await _client
+        .from('payments')
+        .select('status')
+        .eq('id', paymentId)
+        .maybeSingle();
+    return payment?['status'] == 'verified' ? paymentId : null;
+  }
 
   Future<void> undoEarlyPayoff(String paymentId) =>
       _client.rpc('undo_early_payoff', params: {'p_payment_id': paymentId});

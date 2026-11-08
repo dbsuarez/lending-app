@@ -105,6 +105,24 @@ const glossary = <String, ({String title, String body})>{
         'kept separate and do not count in the dashboard, collections, '
         'payments, or reports.',
   ),
+  'edit_loan': (
+    title: 'Edit / Correct Loan',
+    body:
+        'Fix a mistake in the loan itself: borrower, amount, rate, months, '
+        'first due date or paydays. The schedule is rebuilt. A draft can be '
+        'edited freely. A released loan can be corrected only while it has no '
+        'payments; the money-release record is replaced and the old one kept. '
+        'The change, with your reason, is saved in the history and can be '
+        'undone right after.',
+  ),
+  'edit_release': (
+    title: 'Edit Money Release',
+    body:
+        'Fix the date, method or reference of when the money was handed '
+        'over (the "borrowed" date). The amount always equals the principal '
+        'and does not change. Works even after payments; nothing is '
+        're-applied.',
+  ),
   'cancel_draft': (
     title: 'Cancel Draft',
     body:

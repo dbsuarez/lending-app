@@ -145,6 +145,103 @@ class PaymentsController extends AsyncNotifier<List<PaymentSummary>> {
     }
   }
 
+  /// Why the last [correctDetails] failed, in words the user can act on.
+  String? lastCorrectionError;
+
+  /// Corrects when a payment was received, its method and reference.
+  /// Returns the correction id (for undo), or null on failure (see
+  /// [lastCorrectionError]).
+  Future<String?> correctDetails(
+    PaymentSummary payment, {
+    required DateTime receivedAt,
+    required String method,
+    required String reference,
+    required String reason,
+  }) async {
+    lastCorrectionError = null;
+    try {
+      if (isLive) {
+        _repository ??= SupabasePaymentsRepository(Supabase.instance.client);
+        final id = await _repository!.correctDetails(
+          paymentId: payment.id,
+          receivedAt: receivedAt,
+          method: method,
+          reference: reference,
+          reason: reason,
+        );
+        state = AsyncData(await _repository!.fetchPayments());
+        return id;
+      }
+      await _initialBuild();
+      final index = _localPayments.indexWhere((p) => p.id == payment.id);
+      if (index < 0) return null;
+      final old = _localPayments[index];
+      _localPayments[index] = _copy(
+        old,
+        receivedAt: receivedAt,
+        method: method,
+        reference: reference,
+      );
+      _localCorrections[payment.id] = old;
+      state = AsyncData(List.unmodifiable(_localPayments));
+      return 'local-${payment.id}';
+    } on PostgrestException catch (error) {
+      lastCorrectionError = error.message.contains('early payoff')
+          ? 'this is the early payoff payment. Open the loan, choose '
+                'Undo Early Payoff, then record the payoff again with the '
+                'right date.'
+          : error.message;
+      return null;
+    } catch (error) {
+      lastCorrectionError = '$error';
+      return null;
+    }
+  }
+
+  /// Undo for [correctDetails].
+  Future<bool> undoCorrection(String correctionId) async {
+    try {
+      if (isLive) {
+        await _repository!.undoCorrection(correctionId);
+        state = AsyncData(await _repository!.fetchPayments());
+        return true;
+      }
+      final paymentId = correctionId.replaceFirst('local-', '');
+      final previous = _localCorrections.remove(paymentId);
+      final index = _localPayments.indexWhere((p) => p.id == paymentId);
+      if (previous == null || index < 0) return false;
+      _localPayments[index] = _copy(
+        _localPayments[index],
+        receivedAt: previous.receivedAt,
+        method: previous.method,
+        reference: previous.reference,
+      );
+      state = AsyncData(List.unmodifiable(_localPayments));
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  final Map<String, PaymentSummary> _localCorrections = {};
+
+  static PaymentSummary _copy(
+    PaymentSummary p, {
+    required DateTime receivedAt,
+    required String method,
+    required String reference,
+  }) => PaymentSummary(
+    id: p.id,
+    loanId: p.loanId,
+    borrowerName: p.borrowerName,
+    amountCentavos: p.amountCentavos,
+    receivedAt: receivedAt,
+    method: method,
+    reference: reference,
+    status: p.status,
+    unappliedCentavos: p.unappliedCentavos,
+  );
+
   /// Verifies several pending payments, oldest received first (so money is
   /// applied in the order it arrived). Returns the ids that were verified;
   /// ones that fail (e.g. no permission) are skipped.

@@ -13,6 +13,8 @@ import '../../domain/services/loan_calculator.dart';
 import '../../core/undo/undo_controller.dart';
 import '../documents/loan_print_menu.dart';
 import '../settings/operations_config_provider.dart';
+import '../payments/payment_edit_dialog.dart';
+import '../payments/payments_controller.dart';
 import 'extension_preview_dialog.dart';
 import 'ledger_explanation_dialog.dart';
 import 'loans_controller.dart';
@@ -120,7 +122,7 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
               _Overview(loan),
               _Schedule(loan.installments),
               _PaymentLedger(loan),
-              _LoanPayments(loan.summary.id),
+              _LoanPayments(loan.summary.id, onChanged: _reload),
               _LoanActivity(loan.summary.id),
               _LoanDocuments(
                 loan: loan,
@@ -264,6 +266,12 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
             ),
           ),
         ],
+        if (loan.summary.status == 'fully_paid')
+          OutlinedButton.icon(
+            onPressed: () => _undoPayoff(loan),
+            icon: const Icon(Icons.undo),
+            label: const Text('Undo Early Payoff'),
+          ),
         if (loan.summary.status == 'draft') ...[
           _explained(
             'cancel_draft',
@@ -372,6 +380,8 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
             () => _earlyPayoff(loan),
           ),
         ],
+        if (status == 'fully_paid')
+          item(Icons.undo, 'Undo Early Payoff', () => _undoPayoff(loan)),
         item(
           loan.summary.isPersonal
               ? Icons.business_center_outlined
@@ -586,6 +596,9 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
         methods:
             ref.read(operationsConfigProvider).value?.paymentMethods ??
             OperationsConfig.defaults.paymentMethods,
+        loadQuote: (day) => ref
+            .read(loansControllerProvider.notifier)
+            .earlyPayoffQuote(loan.summary.id, day),
       ),
     );
     if (values == null) return;
@@ -593,7 +606,7 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
         .read(loansControllerProvider.notifier)
         .recordEarlyPayoff(
           loanId: loan.summary.id,
-          date: quote.payoffDate,
+          date: values.quote.payoffDate,
           method: values.method,
           reference: values.reference,
         );
@@ -607,6 +620,48 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
     } else {
       _undo.record('Early payoff could not be recorded.');
     }
+  }
+
+  Future<void> _undoPayoff(LoanDetail loan) async {
+    final paymentId = await _loans.fetchEarlyPayoffPaymentId(loan.summary.id);
+    if (!mounted) return;
+    if (paymentId == null) {
+      _undo.notify('This loan has no early payoff to undo.');
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Undo early payoff?'),
+        content: const Text(
+          'The loan becomes Active again with its original schedule, and the '
+          'payoff payment is marked reversed (kept in the history). Use this '
+          'to fix a payoff recorded with the wrong date or amount, then record '
+          'the payoff again.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Undo Payoff'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final undone = await _loans.undoEarlyPayoff(paymentId);
+    if (!mounted) return;
+    _undo.record(
+      undone
+          ? 'Early payoff undone. The loan is Active again; record the payoff '
+                'again with the right date.'
+          : 'Payoff could not be undone. Only the person who recorded it can '
+                'undo it, and only if no payment was recorded after it.',
+    );
+    if (undone) _reload();
   }
 
   Future<void> _amendDueDate(LoanDetail loan) async {
@@ -1287,17 +1342,68 @@ class _ScheduleState extends State<_Schedule> {
   });
 }
 
-class _LoanPayments extends ConsumerWidget {
-  const _LoanPayments(this.loanId);
+class _LoanPayments extends ConsumerStatefulWidget {
+  const _LoanPayments(this.loanId, {required this.onChanged});
   final String loanId;
+
+  /// Called after a payment was edited (or the edit undone), so the loan
+  /// page can refresh its ledger.
+  final VoidCallback onChanged;
+
   @override
-  Widget build(
-    BuildContext context,
-    WidgetRef ref,
-  ) => FutureBuilder<List<PaymentSummary>>(
-    future: ref
-        .read(loansControllerProvider.notifier)
-        .fetchLoanPayments(loanId),
+  ConsumerState<_LoanPayments> createState() => _LoanPaymentsState();
+}
+
+class _LoanPaymentsState extends ConsumerState<_LoanPayments> {
+  late Future<List<PaymentSummary>> payments = _load();
+
+  Future<List<PaymentSummary>> _load() => ref
+      .read(loansControllerProvider.notifier)
+      .fetchLoanPayments(widget.loanId);
+
+  void _reload() {
+    if (!mounted) return;
+    setState(() => payments = _load());
+    widget.onChanged();
+  }
+
+  Future<void> _edit(PaymentSummary payment) async {
+    final methods =
+        ref.read(operationsConfigProvider).value?.paymentMethods ??
+        OperationsConfig.defaults.paymentMethods;
+    final values = await PaymentEditDialog.show(context, payment, methods);
+    if (values == null || !mounted) return;
+    final controller = ref.read(paymentsControllerProvider.notifier);
+    final undo = ref.read(undoControllerProvider.notifier);
+    final id = await controller.correctDetails(
+      payment,
+      receivedAt: values.receivedAt,
+      method: values.method,
+      reference: values.reference,
+      reason: values.reason,
+    );
+    if (!mounted) return;
+    if (id == null) {
+      undo.record(
+        'Payment could not be updated: '
+        '${controller.lastCorrectionError ?? 'try again.'}',
+      );
+      return;
+    }
+    undo.offer(
+      'Payment details updated. The change is in the history.',
+      () async {
+        final undone = await controller.undoCorrection(id);
+        if (undone) _reload();
+        return undone;
+      },
+    );
+    _reload();
+  }
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<List<PaymentSummary>>(
+    future: payments,
     builder: (context, snapshot) {
       if (snapshot.connectionState != ConnectionState.done) {
         return const Center(child: CircularProgressIndicator());
@@ -1317,6 +1423,8 @@ class _LoanPayments extends ConsumerWidget {
         separatorBuilder: (_, _) => const SizedBox(height: 8),
         itemBuilder: (_, index) {
           final item = items[index];
+          final editable =
+              item.status == 'pending' || item.status == 'verified';
           return Card(
             child: ListTile(
               leading: const Icon(Icons.payments_outlined),
@@ -1324,7 +1432,18 @@ class _LoanPayments extends ConsumerWidget {
               subtitle: Text(
                 '${formatPhilippineDateTime(item.receivedAt)} · ${item.method}${item.reference.isEmpty ? '' : ' · ${item.reference}'}',
               ),
-              trailing: Chip(label: Text(item.status)),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  AppStatusBadge(item.status),
+                  if (editable)
+                    IconButton(
+                      tooltip: 'Edit date, method or reference',
+                      onPressed: () => _edit(item),
+                      icon: const Icon(Icons.edit_outlined),
+                    ),
+                ],
+              ),
             ),
           );
         },
@@ -1837,25 +1956,53 @@ class _DisbursementDialogState extends State<_DisbursementDialog> {
 }
 
 class _PayoffValues {
-  const _PayoffValues(this.method, this.reference);
+  const _PayoffValues(this.method, this.reference, this.quote);
   final String method, reference;
+  final EarlyPayoffQuote quote;
 }
 
 class _EarlyPayoffDialog extends StatefulWidget {
-  const _EarlyPayoffDialog({required this.quote, required this.methods});
+  const _EarlyPayoffDialog({
+    required this.quote,
+    required this.methods,
+    required this.loadQuote,
+  });
   final EarlyPayoffQuote quote;
   final List<String> methods;
+
+  /// Re-quotes for another payoff date (interest due by then is included).
+  final Future<EarlyPayoffQuote?> Function(DateTime date) loadQuote;
   @override
   State<_EarlyPayoffDialog> createState() => _EarlyPayoffDialogState();
 }
 
 class _EarlyPayoffDialogState extends State<_EarlyPayoffDialog> {
   late String method = widget.methods.first;
+  late EarlyPayoffQuote quote = widget.quote;
+  bool loading = false;
   final reference = TextEditingController();
   @override
   void dispose() {
     reference.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      initialDate: quote.payoffDate,
+      helpText: 'When did the borrower pay it off?',
+    );
+    if (picked == null) return;
+    setState(() => loading = true);
+    final next = await widget.loadQuote(picked);
+    if (!mounted) return;
+    setState(() {
+      loading = false;
+      if (next != null) quote = next;
+    });
   }
 
   @override
@@ -1868,12 +2015,24 @@ class _EarlyPayoffDialogState extends State<_EarlyPayoffDialog> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           ListTile(
+            leading: const Icon(Icons.event),
+            title: const Text('Paid off on'),
+            subtitle: const Text('Interest due up to this date is included'),
+            trailing: loading
+                ? const SizedBox.square(
+                    dimension: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Text(formatPhilippineDate(quote.payoffDate)),
+            onTap: loading ? null : _pickDate,
+          ),
+          ListTile(
             title: const Text('Remaining principal'),
-            trailing: Text(formatPeso(widget.quote.principalCentavos)),
+            trailing: Text(formatPeso(quote.principalCentavos)),
           ),
           ListTile(
             title: const Text('Interest earned through payoff date'),
-            trailing: Text(formatPeso(widget.quote.earnedInterestCentavos)),
+            trailing: Text(formatPeso(quote.earnedInterestCentavos)),
           ),
           const Divider(),
           ListTile(
@@ -1882,7 +2041,7 @@ class _EarlyPayoffDialogState extends State<_EarlyPayoffDialog> {
               style: TextStyle(fontWeight: FontWeight.w700),
             ),
             trailing: Text(
-              formatPeso(widget.quote.payoffCentavos),
+              formatPeso(quote.payoffCentavos),
               style: const TextStyle(fontWeight: FontWeight.w800),
             ),
           ),
@@ -1915,10 +2074,12 @@ class _EarlyPayoffDialogState extends State<_EarlyPayoffDialog> {
         child: const Text('Cancel'),
       ),
       FilledButton(
-        onPressed: () => Navigator.pop(
-          context,
-          _PayoffValues(method, reference.text.trim()),
-        ),
+        onPressed: loading
+            ? null
+            : () => Navigator.pop(
+                context,
+                _PayoffValues(method, reference.text.trim(), quote),
+              ),
         child: const Text('Confirm Payoff'),
       ),
     ],

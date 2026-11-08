@@ -11,6 +11,7 @@ import '../../core/widgets/clearable_search_field.dart';
 import '../../domain/models/models.dart';
 import '../loans/loans_controller.dart';
 import '../settings/operations_config_provider.dart';
+import 'payment_edit_dialog.dart';
 import 'payments_controller.dart';
 
 class PaymentsScreen extends ConsumerStatefulWidget {
@@ -221,6 +222,7 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
                 onVerify: () => _verify(payments[index]),
                 onReject: () => _reject(payments[index]),
                 onReverse: () => _reverse(payments[index]),
+                onEdit: () => _edit(payments[index]),
               ),
             )
           : ColumnToggle(
@@ -461,8 +463,39 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
           onPressed: () => _reverse(payment),
           child: const Text('Reverse'),
         ),
+      if (payment.status == 'pending' || payment.status == 'verified')
+        TextButton(onPressed: () => _edit(payment), child: const Text('Edit')),
     ],
   );
+
+  /// Fix when it was received, the method or reference (not the amount).
+  Future<void> _edit(PaymentSummary payment) async {
+    final methods =
+        ref.read(operationsConfigProvider).value?.paymentMethods ??
+        OperationsConfig.defaults.paymentMethods;
+    final values = await PaymentEditDialog.show(context, payment, methods);
+    if (values == null || !mounted) return;
+    final payments = ref.read(paymentsControllerProvider.notifier);
+    final id = await payments.correctDetails(
+      payment,
+      receivedAt: values.receivedAt,
+      method: values.method,
+      reference: values.reference,
+      reason: values.reason,
+    );
+    if (!mounted) return;
+    if (id != null) {
+      _undo.offer(
+        'Payment details updated. The change is in the history.',
+        () => payments.undoCorrection(id),
+      );
+    } else {
+      _undo.record(
+        'Payment could not be updated: '
+        '${payments.lastCorrectionError ?? 'try again.'}',
+      );
+    }
+  }
 
   Future<void> _verify(PaymentSummary payment) async {
     final confirmed = await showDialog<bool>(
@@ -525,11 +558,12 @@ class _PaymentCard extends StatelessWidget {
     required this.onVerify,
     required this.onReject,
     required this.onReverse,
+    required this.onEdit,
     this.selected,
     this.onSelected,
   });
   final PaymentSummary payment;
-  final VoidCallback onVerify, onReject, onReverse;
+  final VoidCallback onVerify, onReject, onReverse, onEdit;
 
   /// Null when the payment cannot be selected (not pending).
   final bool? selected;
@@ -580,6 +614,7 @@ class _PaymentCard extends StatelessWidget {
               alignment: Alignment.centerRight,
               child: Wrap(
                 children: [
+                  TextButton(onPressed: onEdit, child: const Text('Edit')),
                   TextButton(onPressed: onVerify, child: const Text('Verify')),
                   TextButton(onPressed: onReject, child: const Text('Reject')),
                 ],
@@ -589,9 +624,14 @@ class _PaymentCard extends StatelessWidget {
           if (payment.status == 'verified')
             Align(
               alignment: Alignment.centerRight,
-              child: TextButton(
-                onPressed: onReverse,
-                child: const Text('Reverse Payment'),
+              child: Wrap(
+                children: [
+                  TextButton(onPressed: onEdit, child: const Text('Edit')),
+                  TextButton(
+                    onPressed: onReverse,
+                    child: const Text('Reverse Payment'),
+                  ),
+                ],
               ),
             ),
         ],
@@ -628,7 +668,7 @@ class _PaymentDialogState extends State<_PaymentDialog> {
   final reference = TextEditingController();
   late String loanId = widget.loans.first.id;
   late String method = widget.methods.first;
-  final DateTime receivedAt = DateTime.now();
+  DateTime receivedAt = DateTime.now();
 
   @override
   void dispose() {
@@ -692,11 +732,9 @@ class _PaymentDialogState extends State<_PaymentDialog> {
                 ),
               ),
               const SizedBox(height: 12),
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.schedule),
-                title: const Text('Received at'),
-                subtitle: Text(formatPhilippineDateTime(receivedAt)),
+              ReceivedAtField(
+                value: receivedAt,
+                onChanged: (value) => setState(() => receivedAt = value),
               ),
               const Text(
                 'This payment will remain Pending Verification and will not reduce the balance yet.',
