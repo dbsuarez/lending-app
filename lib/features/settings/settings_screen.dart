@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../core/export_file.dart';
+import 'backup_dialogs.dart';
 import '../../core/undo/undo_controller.dart';
 import '../../core/security/app_lock.dart';
 import '../../core/config/app_config.dart';
@@ -10,10 +10,6 @@ import 'operations_config_provider.dart';
 import 'business_profile_provider.dart';
 import '../sync/offline_sync_controller.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:file_saver/file_saver.dart';
-import 'package:file_picker/file_picker.dart';
-import 'dart:convert';
-import 'dart:typed_data';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -31,26 +27,22 @@ class SettingsScreen extends ConsumerWidget {
             const _BiometricUnlockTile(),
             ListTile(
               leading: const Icon(Icons.backup_outlined),
-              title: const Text('Export encrypted-storage backup source'),
+              title: const Text('Back up everything'),
               subtitle: const Text(
-                'Download organization data as JSON; store it in an encrypted location',
+                'All records and uploaded files in one checked file',
               ),
               trailing: const Icon(Icons.download_outlined),
-              onTap: AppConfig.hasSupabase
-                  ? () => _exportBackup(context)
-                  : null,
+              onTap: AppConfig.hasSupabase ? () => exportBackup(context) : null,
             ),
             const Divider(height: 1),
             ListTile(
               leading: const Icon(Icons.restore_page_outlined),
-              title: const Text('Validate backup restore drill'),
+              title: const Text('Check a backup'),
               subtitle: const Text(
-                'Owner checks an exported backup without changing live data',
+                'Verify a backup file and compare it with the live data',
               ),
               trailing: const Icon(Icons.fact_check_outlined),
-              onTap: AppConfig.hasSupabase
-                  ? () => _validateBackup(context)
-                  : null,
+              onTap: AppConfig.hasSupabase ? () => checkBackup(context) : null,
             ),
             const Divider(height: 1),
             ListTile(
@@ -185,111 +177,6 @@ class SettingsScreen extends ConsumerWidget {
       ),
     ],
   );
-
-  Future<void> _exportBackup(BuildContext context) async {
-    final client = Supabase.instance.client;
-    final membership = await client
-        .from('organization_members')
-        .select('organization_id')
-        .eq('user_id', client.auth.currentUser!.id)
-        .eq('status', 'active')
-        .limit(1)
-        .single();
-    final organizationId = membership['organization_id'] as String;
-    final tables = [
-      'organizations',
-      'organization_members',
-      'borrowers',
-      'loans',
-      'installments',
-      'payments',
-      'payment_allocations',
-      'audit_events',
-      'loan_share_links',
-      'collection_activities',
-      'loan_disbursements',
-      'loan_documents',
-      'staff_invitations',
-    ];
-    final data = <String, dynamic>{
-      'format': 'lending-manager-backup-v1',
-      'exported_at': DateTime.now().toUtc().toIso8601String(),
-      'organization_id': organizationId,
-    };
-    for (final table in tables) {
-      data[table] = await client
-          .from(table)
-          .select()
-          .eq(
-            table == 'organizations' ? 'id' : 'organization_id',
-            organizationId,
-          );
-    }
-    final bytes = Uint8List.fromList(
-      utf8.encode(const JsonEncoder.withIndent('  ').convert(data)),
-    );
-    final where = await saveExport(
-      name:
-          'lending-manager-backup-${DateTime.now().toIso8601String().substring(0, 10)}',
-      bytes: bytes,
-      extension: 'json',
-      mimeType: MimeType.json,
-    );
-    if (context.mounted && where != null) {
-      undoOf(
-        context,
-      ).notify('Backup saved to $where. Keep it in encrypted storage.');
-    }
-  }
-
-  Future<void> _validateBackup(BuildContext context) async {
-    final file = await FilePicker.pickFile(
-      type: FileType.custom,
-      allowedExtensions: const ['json'],
-    );
-    if (file == null) return;
-    try {
-      final decoded = jsonDecode(utf8.decode(await file.readAsBytes()));
-      if (decoded is! Map<String, dynamic> ||
-          decoded['format'] != 'lending-manager-backup-v1') {
-        throw const FormatException('Unsupported backup format');
-      }
-      const required = [
-        'organizations',
-        'organization_members',
-        'borrowers',
-        'loans',
-        'installments',
-        'payments',
-        'payment_allocations',
-        'audit_events',
-      ];
-      var count = 0;
-      for (final table in required) {
-        final rows = decoded[table];
-        if (rows is! List) throw FormatException('Missing $table records');
-        count += rows.length;
-      }
-      await Supabase.instance.client.rpc(
-        'record_backup_verification',
-        params: {
-          'p_exported_at': decoded['exported_at'],
-          'p_record_count': count,
-        },
-      );
-      if (context.mounted) {
-        undoOf(context).notify(
-          'Backup validated: $count records readable. Restore owner: organization owner.',
-        );
-      }
-    } catch (_) {
-      if (context.mounted) {
-        undoOf(
-          context,
-        ).notify('Backup validation failed. No live data was changed.');
-      }
-    }
-  }
 }
 
 class _StaffRolesDialog extends StatefulWidget {

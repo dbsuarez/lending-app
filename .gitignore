@@ -75,3 +75,6 @@ supabase/.branches/
 
 # Source QR images; the app ships trimmed copies in assets/payment_qr/
 /docs/QRs/
+
+# Node tooling
+node_modules/

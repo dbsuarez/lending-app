@@ -145,6 +145,9 @@ deployed. Remaining PDF artifacts, final legal review, and full phone acceptance
 - [x] Role-constrained staff invitation email and account provisioning workflow
 - [x] Organization JSON backup export and encrypted-storage reminder
 - [x] Non-destructive backup validation drill with audited owner responsibility
+- [x] Full backup v2: every table paged, checksums, uploaded files, balances (docs/BACKUP_AND_RESTORE.md)
+- [x] Weekly automatic backup with restore drill on this PC, second copy on another disk
+- [x] Verified restore into a new project (counts, every row, balances; refuses production)
 - [x] Audit-event viewer
 
 ## Verification evidence

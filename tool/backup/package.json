@@ -1,0 +1,16 @@
+{
+  "name": "lending-manager-backup",
+  "private": true,
+  "type": "module",
+  "description": "Backup, restore drill and restore for Lending Manager",
+  "scripts": {
+    "test": "node test.mjs",
+    "backup": "node backup.mjs",
+    "restore": "node restore.mjs"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "0.3.2",
+    "fflate": "0.8.2",
+    "pg": "8.13.1"
+  }
+}
