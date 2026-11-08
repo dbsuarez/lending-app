@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/widgets/table_columns.dart';
 import '../../core/widgets/info_tip.dart';
 import '../../core/config/app_config.dart';
@@ -229,6 +230,38 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
             loan.summary.isPersonal ? 'Move to Business' : 'Mark Personal',
           ),
         ),
+        if (loan.summary.status == 'draft')
+          _explained(
+            'edit_loan',
+            OutlinedButton.icon(
+              onPressed: () => _editLoan(loan),
+              icon: const Icon(Icons.edit_outlined),
+              label: const Text('Edit Draft'),
+            ),
+          ),
+        if (loan.summary.status == 'active' ||
+            loan.summary.status == 'fully_paid')
+          MenuAnchor(
+            menuChildren: [
+              if (loan.summary.status == 'active')
+                MenuItemButton(
+                  leadingIcon: const Icon(Icons.edit_note_outlined),
+                  onPressed: () => _editLoan(loan),
+                  child: const Text('Correct Loan'),
+                ),
+              MenuItemButton(
+                leadingIcon: const Icon(Icons.event_repeat_outlined),
+                onPressed: () => _editRelease(loan),
+                child: const Text('Edit Money Release'),
+              ),
+            ],
+            builder: (context, controller, _) => OutlinedButton.icon(
+              onPressed: () =>
+                  controller.isOpen ? controller.close() : controller.open(),
+              icon: const Icon(Icons.edit_outlined),
+              label: const Text('Correct'),
+            ),
+          ),
         if (loan.summary.status == 'active') ...[
           _explained(
             'extension_preview',
@@ -357,8 +390,17 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
             'Confirm & Disburse',
             () => _activate(loan),
           ),
+          item(Icons.edit_outlined, 'Edit Draft', () => _editLoan(loan)),
           item(Icons.cancel_outlined, 'Cancel Draft', () => _cancelDraft(loan)),
         ],
+        if (status == 'active')
+          item(Icons.edit_note_outlined, 'Correct Loan', () => _editLoan(loan)),
+        if (status == 'active' || status == 'fully_paid')
+          item(
+            Icons.event_repeat_outlined,
+            'Edit Money Release',
+            () => _editRelease(loan),
+          ),
         if (status == 'active') ...[
           item(
             Icons.request_quote_outlined,
@@ -419,7 +461,16 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
 
   void _showActionGlossary(LoanDetail loan) {
     final terms = [
-      if (loan.summary.status == 'draft') ...['disburse', 'cancel_draft'],
+      if (loan.summary.status == 'draft') ...[
+        'edit_loan',
+        'disburse',
+        'cancel_draft',
+      ],
+      if (loan.summary.status == 'active' ||
+          loan.summary.status == 'fully_paid') ...[
+        'edit_loan',
+        'edit_release',
+      ],
       if (loan.summary.status == 'active') ...[
         'extension_preview',
         'amend_due_date',
@@ -662,6 +713,83 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
                 'undo it, and only if no payment was recorded after it.',
     );
     if (undone) _reload();
+  }
+
+  /// Drafts: open the editor. Active loans: only without payments (the
+  /// server enforces this too); otherwise explain the options.
+  void _editLoan(LoanDetail loan) {
+    if (loan.summary.status == 'active' && loan.payments.isNotEmpty) {
+      showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('This loan already has payments'),
+          content: const Text(
+            'Correcting the amount, rate or months of a loan with payments '
+            'needs the payments re-applied, which is coming next ("Correct '
+            'terms"). For now:\n\n'
+            '• Wrong release date or method: use Edit Money Release.\n'
+            '• Wrong payment: edit or reverse it in the Payments tab.\n'
+            '• Wrong terms: reverse the payments, correct the loan, then '
+            'record the payments again; or use Refinance.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    context.go('/loans/${loan.summary.id}/edit');
+  }
+
+  Future<void> _editRelease(LoanDetail loan) async {
+    final LoanEditTerms terms;
+    try {
+      terms = await _loans.fetchEditTerms(loan.summary.id);
+    } catch (_) {
+      if (mounted) _undo.notify('The money release could not be loaded.');
+      return;
+    }
+    if (!mounted) return;
+    if (terms.disbursedOn == null) {
+      _undo.notify('This loan has no money release yet.');
+      return;
+    }
+    final values = await showDialog<_DisbursementValues>(
+      context: context,
+      builder: (_) => _DisbursementDialog(
+        principalCentavos: loan.summary.principalCentavos,
+        methods:
+            ref.read(operationsConfigProvider).value?.paymentMethods ??
+            OperationsConfig.defaults.paymentMethods,
+        editing: terms,
+      ),
+    );
+    if (values == null || !mounted) return;
+    try {
+      final id = await _loans.correctDisbursement(
+        loanId: loan.summary.id,
+        disbursedOn: values.date,
+        method: values.method,
+        reference: values.reference,
+        reason: values.reason,
+      );
+      if (!mounted) return;
+      _undo.offer(
+        'Money release updated. The change is in the history.',
+        _undoThenReload(() => _loans.undoLoanCorrection(id)),
+      );
+      _reload();
+    } catch (error) {
+      if (!mounted) return;
+      _undo.record(
+        'Money release could not be updated: '
+        '${error is PostgrestException ? error.message : 'try again.'}',
+      );
+    }
   }
 
   Future<void> _amendDueDate(LoanDetail loan) async {
@@ -1569,9 +1697,14 @@ String _actionLabel(String action) => action
     .join(' ');
 
 class _DisbursementValues {
-  const _DisbursementValues(this.date, this.method, this.reference);
+  const _DisbursementValues(
+    this.date,
+    this.method,
+    this.reference, [
+    this.reason = '',
+  ]);
   final DateTime date;
-  final String method, reference;
+  final String method, reference, reason;
 }
 
 class _AmendmentValues {
@@ -1872,71 +2005,102 @@ class _DisbursementDialog extends StatefulWidget {
   const _DisbursementDialog({
     required this.principalCentavos,
     required this.methods,
+    this.editing,
   });
   final int principalCentavos;
   final List<String> methods;
+
+  /// When set, edits this existing release (date, method, reference) and
+  /// asks for a reason instead of confirming a new one.
+  final LoanEditTerms? editing;
 
   @override
   State<_DisbursementDialog> createState() => _DisbursementDialogState();
 }
 
 class _DisbursementDialogState extends State<_DisbursementDialog> {
-  DateTime date = DateTime.now();
-  late String method = widget.methods.first;
-  final reference = TextEditingController();
+  late DateTime date = widget.editing?.disbursedOn ?? DateTime.now();
+  late String method = widget.editing?.method ?? widget.methods.first;
+  late final reference = TextEditingController(
+    text: widget.editing?.reference ?? '',
+  );
+  final reason = TextEditingController();
+  final key = GlobalKey<FormState>();
+  bool get editing => widget.editing != null;
 
   @override
   void dispose() {
     reference.dispose();
+    reason.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const TitleWithInfo('Confirm and disburse loan', 'disburse'),
+    title: editing
+        ? const TitleWithInfo('Edit money release', 'edit_release')
+        : const TitleWithInfo('Confirm and disburse loan', 'disburse'),
     content: SizedBox(
       width: 480,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            'This records that you released ${formatPeso(widget.principalCentavos)} to the borrower and makes the loan active. After this, the terms are locked.',
-          ),
-          const SizedBox(height: 16),
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Date the money was released'),
-            subtitle: Text(formatPhilippineDate(date)),
-            trailing: const Icon(Icons.event_outlined),
-            onTap: () async {
-              final selected = await showDatePicker(
-                context: context,
-                initialDate: date,
-                firstDate: DateTime(2020),
-                lastDate: DateTime.now().add(const Duration(days: 1)),
-              );
-              if (selected != null) setState(() => date = selected);
-            },
-          ),
-          const SizedBox(height: 8),
-          DropdownButtonFormField<String>(
-            initialValue: method,
-            decoration: const InputDecoration(labelText: 'Method'),
-            items: [
-              for (final item in widget.methods)
-                DropdownMenuItem(value: item, child: Text(item)),
-            ],
-            onChanged: (value) => setState(() => method = value!),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: reference,
-            decoration: const InputDecoration(
-              labelText: 'Reference (optional)',
+      child: Form(
+        key: key,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              editing
+                  ? 'Fix when and how the ${formatPeso(widget.principalCentavos)} was handed over. The amount and any payments stay as they are.'
+                  : 'This records that you released ${formatPeso(widget.principalCentavos)} to the borrower and makes the loan active. After this, the terms are locked.',
             ),
-          ),
-        ],
+            const SizedBox(height: 16),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Date the money was released'),
+              subtitle: Text(formatPhilippineDate(date)),
+              trailing: const Icon(Icons.event_outlined),
+              onTap: () async {
+                final selected = await showDatePicker(
+                  context: context,
+                  initialDate: date,
+                  firstDate: DateTime(2020),
+                  lastDate: DateTime.now().add(const Duration(days: 1)),
+                );
+                if (selected != null) setState(() => date = selected);
+              },
+            ),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<String>(
+              initialValue: method,
+              decoration: const InputDecoration(labelText: 'Method'),
+              items: [
+                for (final item in {method, ...widget.methods})
+                  DropdownMenuItem(value: item, child: Text(item)),
+              ],
+              onChanged: (value) => setState(() => method = value!),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: reference,
+              decoration: const InputDecoration(
+                labelText: 'Reference (optional)',
+              ),
+            ),
+            if (editing) ...[
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: reason,
+                decoration: const InputDecoration(
+                  labelText: 'Reason for the change',
+                  hintText: 'e.g. Released on Oct 2, entered late',
+                ),
+                validator: (value) => (value?.trim().length ?? 0) >= 3
+                    ? null
+                    : 'Enter a short reason (kept in the history)',
+              ),
+            ],
+          ],
+        ),
       ),
     ),
     actions: [
@@ -1945,11 +2109,19 @@ class _DisbursementDialogState extends State<_DisbursementDialog> {
         child: const Text('Cancel'),
       ),
       FilledButton(
-        onPressed: () => Navigator.pop(
-          context,
-          _DisbursementValues(date, method, reference.text.trim()),
-        ),
-        child: const Text('Confirm & Disburse'),
+        onPressed: () {
+          if (!key.currentState!.validate()) return;
+          Navigator.pop(
+            context,
+            _DisbursementValues(
+              date,
+              method,
+              reference.text.trim(),
+              reason.text.trim(),
+            ),
+          );
+        },
+        child: Text(editing ? 'Save Changes' : 'Confirm & Disburse'),
       ),
     ],
   );

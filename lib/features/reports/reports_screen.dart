@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_saver/file_saver.dart';
 import 'dart:convert';
 import 'dart:typed_data';
+import '../../core/export_file.dart';
 import '../../core/widgets/info_tip.dart';
 import '../../core/undo/undo_controller.dart';
 import '../../core/formatting.dart';
@@ -233,15 +234,15 @@ class ReportsScreen extends ConsumerWidget {
         ],
     ];
     final csv = rows.map((row) => row.map(_csvCell).join(',')).join('\r\n');
-    await FileSaver.instance.saveFile(
+    final where = await saveExport(
       name:
           'lending-manager-export-${DateTime.now().toIso8601String().substring(0, 10)}',
       bytes: Uint8List.fromList(utf8.encode(csv)),
-      fileExtension: 'csv',
+      extension: 'csv',
       mimeType: MimeType.csv,
     );
-    if (context.mounted) {
-      undoOf(context).notify('CSV export created.');
+    if (context.mounted && where != null) {
+      undoOf(context).notify('CSV export saved to $where.');
     }
   }
 

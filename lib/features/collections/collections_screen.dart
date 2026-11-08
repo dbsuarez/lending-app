@@ -206,49 +206,63 @@ class _Queue extends ConsumerWidget {
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Column(
                   children: [
-                    SegmentedButton<String>(
-                      segments: [
-                        for (final (value, label) in const [
+                    // Long-press anywhere on a segment to make it the
+                    // default. The detector wraps the whole control (the
+                    // segments are equal width) so a finger beside the label
+                    // still counts, which matters on phones.
+                    Builder(
+                      builder: (segmentsContext) {
+                        const options = [
                           ('all', 'All'),
                           ('upcoming', 'Upcoming'),
                           ('overdue', 'Overdue'),
-                        ])
-                          ButtonSegment(
-                            value: value,
-                            // Long-press a segment to make it the default.
-                            label: GestureDetector(
-                              behavior: HitTestBehavior.opaque,
-                              onLongPress: () async {
-                                await ref
-                                    .read(filterDefaultsProvider)
-                                    .set(_QueueFilter.listKey, value);
-                                ref
-                                    .read(_queueFilterProvider.notifier)
-                                    .select(value);
-                                if (context.mounted) {
-                                  undoOf(context).notify(
-                                    '"$label" is now the default for Collections.',
-                                  );
-                                }
-                              },
-                              child: Text(
-                                ref
-                                            .read(filterDefaultsProvider)
-                                            .get(
-                                              _QueueFilter.listKey,
-                                              'upcoming',
-                                            ) ==
-                                        value
-                                    ? '$label •'
-                                    : label,
-                              ),
-                            ),
+                        ];
+                        final saved = ref
+                            .read(filterDefaultsProvider)
+                            .get(_QueueFilter.listKey, 'upcoming');
+                        return GestureDetector(
+                          onLongPressStart: (details) async {
+                            final box =
+                                segmentsContext.findRenderObject()
+                                    as RenderBox?;
+                            if (box == null || !box.hasSize) return;
+                            final index =
+                                (details.localPosition.dx /
+                                        box.size.width *
+                                        options.length)
+                                    .floor()
+                                    .clamp(0, options.length - 1);
+                            final (value, label) = options[index];
+                            HapticFeedback.mediumImpact();
+                            await ref
+                                .read(filterDefaultsProvider)
+                                .set(_QueueFilter.listKey, value);
+                            ref
+                                .read(_queueFilterProvider.notifier)
+                                .select(value);
+                            if (context.mounted) {
+                              undoOf(context).notify(
+                                '"$label" is now the default for Collections.',
+                              );
+                            }
+                          },
+                          child: SegmentedButton<String>(
+                            segments: [
+                              for (final (value, label) in options)
+                                ButtonSegment(
+                                  value: value,
+                                  label: Text(
+                                    saved == value ? '$label •' : label,
+                                  ),
+                                ),
+                            ],
+                            selected: {filter},
+                            onSelectionChanged: (value) => ref
+                                .read(_queueFilterProvider.notifier)
+                                .select(value.first),
                           ),
-                      ],
-                      selected: {filter},
-                      onSelectionChanged: (value) => ref
-                          .read(_queueFilterProvider.notifier)
-                          .select(value.first),
+                        );
+                      },
                     ),
                     const SizedBox(height: 4),
                     Text(

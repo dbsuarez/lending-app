@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/formatting.dart';
 import '../../core/undo/undo_controller.dart';
 import '../../domain/models/models.dart';
@@ -10,7 +11,10 @@ import '../settings/operations_config_provider.dart';
 import 'loans_controller.dart';
 
 class LoanFormScreen extends ConsumerStatefulWidget {
-  const LoanFormScreen({super.key});
+  /// With [loanId], edits that draft (or corrects that active loan without
+  /// payments) instead of creating a new one.
+  const LoanFormScreen({super.key, this.loanId});
+  final String? loanId;
   @override
   ConsumerState<LoanFormScreen> createState() => _LoanFormScreenState();
 }
@@ -28,11 +32,59 @@ class _LoanFormScreenState extends ConsumerState<LoanFormScreen> {
   LoanQuote? quote;
   bool saving = false;
 
+  // Edit mode.
+  bool get editing => widget.loanId != null;
+  LoanDetail? original;
+  LoanEditTerms? originalTerms;
+  Object? loadError;
+  final reason = TextEditingController(),
+      releaseReference = TextEditingController();
+  DateTime? releaseDate;
+  String? releaseMethod;
+  bool get correctingActive => original?.summary.status == 'active';
+
   @override
   void initState() {
     super.initState();
     firstDue = _nextPayday(DateTime.now(), pattern);
+    if (editing) _loadOriginal();
   }
+
+  Future<void> _loadOriginal() async {
+    final loans = ref.read(loansControllerProvider.notifier);
+    try {
+      final detail = await loans.fetchDetail(widget.loanId!);
+      final terms = await loans.fetchEditTerms(widget.loanId!);
+      if (!mounted) return;
+      final s = detail.summary;
+      setState(() {
+        original = detail;
+        originalTerms = terms;
+        borrowerId = s.borrowerId;
+        principal.text = _plain(s.principalCentavos / 100);
+        rate.text = _plain(s.monthlyRateBasisPoints / 100);
+        term.text = '${s.termMonths}';
+        pattern = terms.paydayPattern;
+        customPaydays.text = pattern.join(',');
+        firstDue = terms.firstDueDate;
+        releaseDate = terms.disbursedOn;
+        releaseMethod = terms.method;
+        releaseReference.text = terms.reference ?? '';
+      });
+    } catch (error) {
+      if (mounted) setState(() => loadError = error);
+    }
+  }
+
+  static String _plain(double value) => value == value.roundToDouble()
+      ? value.toStringAsFixed(0)
+      : value.toStringAsFixed(2);
+
+  /// Where a new payday pattern starts counting from: today for new loans,
+  /// the release date when correcting a released loan.
+  DateTime get _patternBase => correctingActive && releaseDate != null
+      ? releaseDate!.add(const Duration(days: 1))
+      : DateTime.now();
 
   @override
   void dispose() {
@@ -40,6 +92,8 @@ class _LoanFormScreenState extends ConsumerState<LoanFormScreen> {
     term.dispose();
     rate.dispose();
     customPaydays.dispose();
+    reason.dispose();
+    releaseReference.dispose();
     super.dispose();
   }
 
@@ -62,6 +116,7 @@ class _LoanFormScreenState extends ConsumerState<LoanFormScreen> {
   }
 
   Future<void> _saveDraft() async {
+    if (editing) return _saveCorrection();
     final currentQuote = quote;
     final borrowers = ref.read(borrowersControllerProvider).value;
     if (currentQuote == null || borrowers == null || borrowerId == null) return;
@@ -87,8 +142,71 @@ class _LoanFormScreenState extends ConsumerState<LoanFormScreen> {
     }
   }
 
+  Future<void> _saveCorrection() async {
+    final currentQuote = quote;
+    final loan = original;
+    final borrowers = ref.read(borrowersControllerProvider).value;
+    if (currentQuote == null || loan == null || borrowerId == null) return;
+    final why = reason.text.trim();
+    if (correctingActive && why.length < 3) {
+      undoOf(context).notify('Enter a short reason for the correction.');
+      return;
+    }
+    final borrower =
+        borrowers?.where((item) => item.id == borrowerId).firstOrNull ??
+        Borrower(
+          id: loan.summary.borrowerId,
+          organizationId: loan.summary.organizationId,
+          firstName: '',
+          lastName: loan.summary.borrowerName,
+        );
+    setState(() => saving = true);
+    final loans = ref.read(loansControllerProvider.notifier);
+    final undo = ref.read(undoControllerProvider.notifier);
+    try {
+      final amendmentId = await loans.correctLoan(
+        loan: loan.summary,
+        borrower: borrower,
+        quote: currentQuote,
+        firstDueDate: firstDue,
+        paydayPattern: pattern,
+        disbursedOn: correctingActive ? releaseDate : null,
+        method: correctingActive ? releaseMethod : null,
+        reference: correctingActive ? releaseReference.text.trim() : null,
+        reason: why,
+      );
+      if (!mounted) return;
+      undo.offer(
+        correctingActive
+            ? 'Loan corrected. The change and reason are in the history.'
+            : 'Draft updated.',
+        () => loans.undoLoanCorrection(amendmentId),
+      );
+      context.go('/loans/${loan.summary.id}?from=loans');
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => saving = false);
+      undo.record(
+        'Loan could not be updated: ${error is PostgrestException ? error.message : 'try again.'}',
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (editing && original == null) {
+      return Center(
+        child: loadError == null
+            ? const CircularProgressIndicator()
+            : const Text('Loan could not be loaded.'),
+      );
+    }
+    final status = original?.summary.status;
+    if (editing && status != 'draft' && status != 'active') {
+      return const Center(
+        child: Text('Only a draft or an active loan can be edited.'),
+      );
+    }
     // Phones: tighter page/card padding and a slimmer stepper rail so form
     // fields get most of the screen width.
     final compact = MediaQuery.sizeOf(context).width < 600;
@@ -103,11 +221,19 @@ class _LoanFormScreenState extends ConsumerState<LoanFormScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  'Create loan',
+                  !editing
+                      ? 'Create loan'
+                      : correctingActive
+                      ? 'Correct loan'
+                      : 'Edit draft',
                   style: Theme.of(context).textTheme.headlineMedium,
                 ),
-                const Text(
-                  'Saving a draft does not release any money. The borrower owes nothing until you confirm and release the loan.',
+                Text(
+                  !editing
+                      ? 'Saving a draft does not release any money. The borrower owes nothing until you confirm and release the loan.'
+                      : correctingActive
+                      ? 'Fix a mistake in this released loan. It has no payments yet, so the schedule is simply rebuilt. The money-release record is replaced and the old one is kept in the history.'
+                      : 'Change anything in this draft. No money has been released yet.',
                 ),
                 const SizedBox(height: 20),
                 Stepper(
@@ -146,6 +272,15 @@ class _LoanFormScreenState extends ConsumerState<LoanFormScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
+                    if (editing)
+                      TextButton(
+                        onPressed: saving
+                            ? null
+                            : () => context.go(
+                                '/loans/${widget.loanId}?from=loans',
+                              ),
+                        child: const Text('Cancel'),
+                      ),
                     if (step > 0)
                       TextButton(
                         onPressed: () => setState(() => step--),
@@ -168,7 +303,13 @@ class _LoanFormScreenState extends ConsumerState<LoanFormScreen> {
                               dimension: 20,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : Text(step == 2 ? 'Create Draft' : 'Continue'),
+                          : Text(
+                              step < 2
+                                  ? 'Continue'
+                                  : editing
+                                  ? 'Save Changes'
+                                  : 'Create Draft',
+                            ),
                     ),
                   ],
                 ),
@@ -200,6 +341,14 @@ class _LoanFormScreenState extends ConsumerState<LoanFormScreen> {
                     DropdownMenuItem(
                       value: borrower.id,
                       child: Text(borrower.displayName),
+                    ),
+                  if (original != null &&
+                      !borrowers.any(
+                        (b) => b.id == original!.summary.borrowerId,
+                      ))
+                    DropdownMenuItem(
+                      value: original!.summary.borrowerId,
+                      child: Text(original!.summary.borrowerName),
                     ),
                 ],
                 onChanged: (value) => setState(() => borrowerId = value),
@@ -274,7 +423,7 @@ class _LoanFormScreenState extends ConsumerState<LoanFormScreen> {
               pattern = value == 'custom'
                   ? _parsePaydays(customPaydays.text) ?? [10, 25]
                   : value!.split('_').map(int.parse).toList();
-              firstDue = _nextPayday(DateTime.now(), pattern);
+              firstDue = _nextPayday(_patternBase, pattern);
               quote = null;
             });
           },
@@ -296,7 +445,7 @@ class _LoanFormScreenState extends ConsumerState<LoanFormScreen> {
               if (parsed != null) {
                 setState(() {
                   pattern = parsed;
-                  firstDue = _nextPayday(DateTime.now(), pattern);
+                  firstDue = _nextPayday(_patternBase, pattern);
                   quote = null;
                 });
               }
@@ -312,7 +461,7 @@ class _LoanFormScreenState extends ConsumerState<LoanFormScreen> {
           onTap: () async {
             final v = await showDatePicker(
               context: context,
-              firstDate: DateTime.now(),
+              firstDate: editing ? DateTime(2020) : DateTime.now(),
               lastDate: DateTime(2035),
               initialDate: firstDue,
             );
@@ -355,17 +504,185 @@ class _LoanFormScreenState extends ConsumerState<LoanFormScreen> {
       ? const Text('No quote available.')
       : Column(
           children: [
-            _totals(),
+            if (editing) _beforeAfter() else _totals(),
+            if (editing) ..._editFields(),
             const SizedBox(height: 16),
-            const ListTile(
-              leading: Icon(Icons.info_outline),
-              title: Text('Review before confirmation'),
-              subtitle: Text(
-                'Interest is based on the original amount lent. Once you confirm the loan, its terms are locked, and any later change is recorded in the history.',
+            if (!editing)
+              const ListTile(
+                leading: Icon(Icons.info_outline),
+                title: Text('Review before confirmation'),
+                subtitle: Text(
+                  'Interest is based on the original amount lent. Once you confirm the loan, its terms are locked, and any later change is recorded in the history.',
+                ),
               ),
-            ),
           ],
         );
+  Widget _beforeAfter() {
+    final before = original!.summary, after = quote!;
+    final beforeEach = original!.installments.isEmpty
+        ? 0
+        : original!.installments.first.amountCentavos;
+    String names(String id, String fallback) =>
+        ref
+            .read(borrowersControllerProvider)
+            .value
+            ?.where((b) => b.id == id)
+            .firstOrNull
+            ?.displayName ??
+        fallback;
+    final rows = <(String, String, String)>[
+      (
+        'Borrower',
+        before.borrowerName,
+        names(borrowerId!, before.borrowerName),
+      ),
+      (
+        'Principal',
+        formatPeso(before.principalCentavos),
+        formatPeso(after.principalCentavos),
+      ),
+      (
+        'Monthly rate',
+        '${_plain(before.monthlyRateBasisPoints / 100)}%',
+        '${_plain(after.monthlyRateBasisPoints / 100)}%',
+      ),
+      ('Months', '${before.termMonths}', '${after.termMonths}'),
+      (
+        'Total repayable',
+        formatPeso(before.totalCentavos),
+        formatPeso(after.totalCentavos),
+      ),
+      (
+        'Installments',
+        '${original!.installments.length} × ${formatPeso(beforeEach)}',
+        '${after.installments.length} × ${formatPeso(after.installments.first.amountCentavos)}',
+      ),
+      (
+        'First due',
+        formatPhilippineDate(originalTerms!.firstDueDate),
+        formatPhilippineDate(firstDue),
+      ),
+    ];
+    final theme = Theme.of(context);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Table(
+          columnWidths: const {
+            0: IntrinsicColumnWidth(),
+            1: FlexColumnWidth(),
+            2: FlexColumnWidth(),
+          },
+          children: [
+            TableRow(
+              children: [
+                for (final h in ['', 'Before', 'After'])
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6, right: 8),
+                    child: Text(
+                      h,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+              ],
+            ),
+            for (final (label, was, now) in rows)
+              TableRow(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 4,
+                    ).copyWith(right: 12),
+                    child: Text(label),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Text(
+                      was,
+                      style: TextStyle(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Text(
+                      now,
+                      style: TextStyle(
+                        fontWeight: was == now
+                            ? FontWeight.normal
+                            : FontWeight.w700,
+                        color: was == now ? null : theme.colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _editFields() {
+    final methods =
+        ref.watch(operationsConfigProvider).value?.paymentMethods ??
+        OperationsConfig.defaults.paymentMethods;
+    return [
+      if (correctingActive) ...[
+        const SizedBox(height: 12),
+        Text('Money release', style: Theme.of(context).textTheme.titleSmall),
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.event),
+          title: const Text('Released on'),
+          subtitle: Text(
+            releaseDate == null ? '—' : formatPhilippineDate(releaseDate!),
+          ),
+          trailing: const Icon(Icons.edit_calendar_outlined),
+          onTap: () async {
+            final v = await showDatePicker(
+              context: context,
+              firstDate: DateTime(2020),
+              lastDate: DateTime.now(),
+              initialDate: releaseDate ?? DateTime.now(),
+            );
+            if (v != null) setState(() => releaseDate = v);
+          },
+        ),
+        DropdownButtonFormField<String>(
+          initialValue: releaseMethod,
+          decoration: const InputDecoration(labelText: 'Released via'),
+          items: [
+            for (final m in {?releaseMethod, ...methods})
+              DropdownMenuItem(value: m, child: Text(m)),
+          ],
+          onChanged: (value) => setState(() => releaseMethod = value),
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: releaseReference,
+          decoration: const InputDecoration(
+            labelText: 'Release reference (optional)',
+          ),
+        ),
+      ],
+      const SizedBox(height: 12),
+      TextFormField(
+        controller: reason,
+        minLines: 1,
+        maxLines: 3,
+        decoration: InputDecoration(
+          labelText: correctingActive
+              ? 'Reason for the correction'
+              : 'Reason (optional)',
+          hintText: 'e.g. Amount typed wrong, was 12,000',
+          helperText: 'Kept in the loan history.',
+        ),
+      ),
+    ];
+  }
+
   Widget _totals() => Card(
     child: Padding(
       padding: const EdgeInsets.all(16),

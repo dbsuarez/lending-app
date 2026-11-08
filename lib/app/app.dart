@@ -60,6 +60,10 @@ final _router = GoRouter(
         ),
         GoRoute(path: '/loans/new', builder: (c, s) => const LoanFormScreen()),
         GoRoute(
+          path: '/loans/:loanId/edit',
+          builder: (c, s) => LoanFormScreen(loanId: s.pathParameters['loanId']),
+        ),
+        GoRoute(
           path: '/loans/:loanId',
           builder: (c, s) => LoanDetailScreen(
             loanId: s.pathParameters['loanId']!,

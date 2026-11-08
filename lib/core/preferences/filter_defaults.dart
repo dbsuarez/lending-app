@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../undo/undo_controller.dart';
@@ -91,6 +92,7 @@ class DefaultableFilterDropdown extends ConsumerWidget {
               builder: (itemContext) => GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onLongPress: () async {
+                  HapticFeedback.mediumImpact();
                   // Close the menu without changing the selection, then save.
                   Navigator.of(itemContext).pop();
                   await defaults.set(listKey, option.$1);
@@ -101,22 +103,31 @@ class DefaultableFilterDropdown extends ConsumerWidget {
                     );
                   }
                 },
-                // Plain-text marker: reliable on every renderer, and clearer
-                // than an icon.
-                child: Text.rich(
-                  TextSpan(
-                    text: option.$2,
-                    children: [
-                      if (option.$1 == current)
-                        TextSpan(
-                          text: '  · default',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                        ),
-                    ],
+                // Fill the whole row: on touch screens the finger often lands
+                // beside the text, which would otherwise be a plain tap.
+                child: SizedBox(
+                  width: double.infinity,
+                  height: kMinInteractiveDimension,
+                  child: Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    // Plain-text marker: reliable on every renderer, and
+                    // clearer than an icon.
+                    child: Text.rich(
+                      TextSpan(
+                        text: option.$2,
+                        children: [
+                          if (option.$1 == current)
+                            TextSpan(
+                              text: '  · default',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),

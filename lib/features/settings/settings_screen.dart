@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/export_file.dart';
 import '../../core/undo/undo_controller.dart';
 import '../../core/security/app_lock.dart';
 import '../../core/config/app_config.dart';
@@ -227,17 +228,17 @@ class SettingsScreen extends ConsumerWidget {
     final bytes = Uint8List.fromList(
       utf8.encode(const JsonEncoder.withIndent('  ').convert(data)),
     );
-    await FileSaver.instance.saveFile(
+    final where = await saveExport(
       name:
           'lending-manager-backup-${DateTime.now().toIso8601String().substring(0, 10)}',
       bytes: bytes,
-      fileExtension: 'json',
+      extension: 'json',
       mimeType: MimeType.json,
     );
-    if (context.mounted) {
+    if (context.mounted && where != null) {
       undoOf(
         context,
-      ).notify('Backup source exported. Keep it in encrypted storage.');
+      ).notify('Backup saved to $where. Keep it in encrypted storage.');
     }
   }
 

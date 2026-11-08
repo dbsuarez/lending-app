@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:file_saver/file_saver.dart';
 import 'dart:convert';
 import 'dart:typed_data';
+import '../../core/export_file.dart';
 import '../../core/undo/undo_controller.dart';
 import '../../core/formatting.dart';
 import '../../core/widgets/app_status_badge.dart';
@@ -254,16 +255,16 @@ class BorrowerDetailScreen extends ConsumerWidget {
           },
       ],
     };
-    await FileSaver.instance.saveFile(
+    final where = await saveExport(
       name: 'borrower-${borrower.id.substring(0, 8)}-data',
       bytes: Uint8List.fromList(
         utf8.encode(const JsonEncoder.withIndent('  ').convert(data)),
       ),
-      fileExtension: 'json',
+      extension: 'json',
       mimeType: MimeType.json,
     );
-    if (context.mounted) {
-      undoOf(context).notify('Borrower data export created.');
+    if (context.mounted && where != null) {
+      undoOf(context).notify('Borrower data saved to $where.');
     }
   }
 }
