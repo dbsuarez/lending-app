@@ -266,15 +266,39 @@ class LedgerRow {
   final String status;
 }
 
+/// How much interest an early payoff charges (see the payoff migration).
+enum PayoffRule {
+  waiveFuture(
+    'waive_future',
+    'Waive future interest',
+    'Interest only for installments due on or before the payoff date.',
+  ),
+  currentMonth(
+    'current_month',
+    "Charge this month's interest",
+    'Interest for every installment due in the payoff month, even if not due yet.',
+  ),
+  allInterest(
+    'all_interest',
+    'Charge all remaining interest',
+    'No discount: the same total as paying on schedule.',
+  );
+
+  const PayoffRule(this.code, this.label, this.explanation);
+  final String code, label, explanation;
+}
+
 class EarlyPayoffQuote {
   const EarlyPayoffQuote({
     required this.principalCentavos,
     required this.earnedInterestCentavos,
     required this.payoffCentavos,
     required this.payoffDate,
+    this.rule = PayoffRule.waiveFuture,
   });
   final int principalCentavos, earnedInterestCentavos, payoffCentavos;
   final DateTime payoffDate;
+  final PayoffRule rule;
 }
 
 class PaymentSummary {

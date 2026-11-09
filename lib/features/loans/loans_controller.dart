@@ -273,14 +273,28 @@ class LoansController extends AsyncNotifier<List<LoanSummary>> {
 
   Future<EarlyPayoffQuote?> earlyPayoffQuote(
     String loanId,
-    DateTime date,
-  ) async {
+    DateTime date, {
+    PayoffRule rule = PayoffRule.waiveFuture,
+  }) async {
     if (!isLive) return null;
     try {
-      return await _repository!.earlyPayoffQuote(loanId, date);
+      return await _repository!.earlyPayoffQuote(loanId, date, rule: rule);
     } catch (_) {
       return null;
     }
+  }
+
+  /// One quote per payoff rule, for choosing with a preview.
+  Future<Map<PayoffRule, EarlyPayoffQuote>?> earlyPayoffQuotes(
+    String loanId,
+    DateTime date,
+  ) async {
+    final quotes = await Future.wait([
+      for (final rule in PayoffRule.values)
+        earlyPayoffQuote(loanId, date, rule: rule),
+    ]);
+    if (quotes.any((q) => q == null)) return null;
+    return {for (final q in quotes) q!.rule: q};
   }
 
   /// Returns the settlement payment id, or null on failure.
@@ -289,6 +303,7 @@ class LoansController extends AsyncNotifier<List<LoanSummary>> {
     required DateTime date,
     required String method,
     required String reference,
+    PayoffRule rule = PayoffRule.waiveFuture,
   }) async {
     if (!isLive) return null;
     try {
@@ -298,6 +313,7 @@ class LoansController extends AsyncNotifier<List<LoanSummary>> {
         date: date,
         method: method,
         reference: reference,
+        rule: rule,
         clientOperationId: const Uuid().v4(),
         deviceId: '${kIsWeb ? 'web' : 'android'}-$userId',
       );

@@ -673,24 +673,24 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
 
   Future<void> _earlyPayoff(LoanDetail loan) async {
     final date = DateTime.now();
-    final quote = await ref
+    final quotes = await ref
         .read(loansControllerProvider.notifier)
-        .earlyPayoffQuote(loan.summary.id, date);
+        .earlyPayoffQuotes(loan.summary.id, date);
     if (!mounted) return;
-    if (quote == null) {
+    if (quotes == null) {
       _undo.notify('The payoff quote could not be loaded.');
       return;
     }
     final values = await showDialog<_PayoffValues>(
       context: context,
       builder: (_) => _EarlyPayoffDialog(
-        quote: quote,
+        quotes: quotes,
         methods:
             ref.read(operationsConfigProvider).value?.paymentMethods ??
             OperationsConfig.defaults.paymentMethods,
-        loadQuote: (day) => ref
+        loadQuotes: (day) => ref
             .read(loansControllerProvider.notifier)
-            .earlyPayoffQuote(loan.summary.id, day),
+            .earlyPayoffQuotes(loan.summary.id, day),
       ),
     );
     if (values == null) return;
@@ -701,11 +701,13 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
           date: values.quote.payoffDate,
           method: values.method,
           reference: values.reference,
+          rule: values.quote.rule,
         );
     if (!mounted) return;
     if (paymentId != null) {
       _undo.offer(
-        'Loan settled early; future unearned interest was waived.',
+        'Loan settled early (${values.quote.rule.label.toLowerCase()}): '
+        '${formatPeso(values.quote.payoffCentavos)}.',
         _undoThenReload(() => _loans.undoEarlyPayoff(paymentId)),
       );
       _reload();
@@ -2213,22 +2215,26 @@ class _PayoffValues {
 
 class _EarlyPayoffDialog extends StatefulWidget {
   const _EarlyPayoffDialog({
-    required this.quote,
+    required this.quotes,
     required this.methods,
-    required this.loadQuote,
+    required this.loadQuotes,
   });
-  final EarlyPayoffQuote quote;
+  final Map<PayoffRule, EarlyPayoffQuote> quotes;
   final List<String> methods;
 
-  /// Re-quotes for another payoff date (interest due by then is included).
-  final Future<EarlyPayoffQuote?> Function(DateTime date) loadQuote;
+  /// Re-quotes every rule for another payoff date.
+  final Future<Map<PayoffRule, EarlyPayoffQuote>?> Function(DateTime date)
+  loadQuotes;
   @override
   State<_EarlyPayoffDialog> createState() => _EarlyPayoffDialogState();
 }
 
 class _EarlyPayoffDialogState extends State<_EarlyPayoffDialog> {
   late String method = widget.methods.first;
-  late EarlyPayoffQuote quote = widget.quote;
+  late Map<PayoffRule, EarlyPayoffQuote> quotes = widget.quotes;
+  // The owner's rule is "at least this month's interest".
+  PayoffRule rule = PayoffRule.currentMonth;
+  EarlyPayoffQuote get quote => quotes[rule]!;
   bool loading = false;
   final reference = TextEditingController();
   @override
@@ -2247,11 +2253,11 @@ class _EarlyPayoffDialogState extends State<_EarlyPayoffDialog> {
     );
     if (picked == null) return;
     setState(() => loading = true);
-    final next = await widget.loadQuote(picked);
+    final next = await widget.loadQuotes(picked);
     if (!mounted) return;
     setState(() {
       loading = false;
-      if (next != null) quote = next;
+      if (next != null) quotes = next;
     });
   }
 
@@ -2267,7 +2273,6 @@ class _EarlyPayoffDialogState extends State<_EarlyPayoffDialog> {
           ListTile(
             leading: const Icon(Icons.event),
             title: const Text('Paid off on'),
-            subtitle: const Text('Interest due up to this date is included'),
             trailing: loading
                 ? const SizedBox.square(
                     dimension: 20,
@@ -2276,12 +2281,39 @@ class _EarlyPayoffDialogState extends State<_EarlyPayoffDialog> {
                 : Text(formatPhilippineDate(quote.payoffDate)),
             onTap: loading ? null : _pickDate,
           ),
+          const SizedBox(height: 4),
+          Text(
+            'Interest to charge',
+            style: Theme.of(context).textTheme.labelLarge,
+          ),
+          RadioGroup<PayoffRule>(
+            groupValue: rule,
+            onChanged: (value) {
+              if (value != null) setState(() => rule = value);
+            },
+            child: Column(
+              children: [
+                for (final r in PayoffRule.values)
+                  RadioListTile<PayoffRule>(
+                    value: r,
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(r.label),
+                    subtitle: Text(r.explanation),
+                    secondary: Text(
+                      formatPeso(quotes[r]!.payoffCentavos),
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const Divider(),
           ListTile(
             title: const Text('Remaining principal'),
             trailing: Text(formatPeso(quote.principalCentavos)),
           ),
           ListTile(
-            title: const Text('Interest earned through payoff date'),
+            title: const Text('Interest charged'),
             trailing: Text(formatPeso(quote.earnedInterestCentavos)),
           ),
           const Divider(),
@@ -2296,7 +2328,8 @@ class _EarlyPayoffDialogState extends State<_EarlyPayoffDialog> {
             ),
           ),
           const Text(
-            'Future unearned interest will be waived. This operation is permanent and audited.',
+            'The rule you choose is recorded with the payoff. You can undo it '
+            'afterwards from the loan page.',
           ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(

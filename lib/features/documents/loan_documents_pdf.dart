@@ -357,8 +357,10 @@ class LoanDocumentsPdf {
       ),
       (
         'Early payment',
-        'The Borrower may pay the whole balance early. Interest for '
-            'installments not yet due on the payoff date is waived.',
+        'The Borrower may pay the whole balance early. The payoff amount is '
+            'the remaining principal plus at least the interest for the month '
+            'of payoff; interest for later months may be waived at the '
+            'Lender\'s discretion.',
       ),
       (
         'Collection',

@@ -310,12 +310,17 @@ class SupabaseLoansRepository {
 
   Future<EarlyPayoffQuote> earlyPayoffQuote(
     String loanId,
-    DateTime date,
-  ) async {
+    DateTime date, {
+    PayoffRule rule = PayoffRule.waiveFuture,
+  }) async {
     final row = Map<String, dynamic>.from(
       await _client.rpc(
             'early_payoff_quote',
-            params: {'p_loan_id': loanId, 'p_payoff_date': _date(date)},
+            params: {
+              'p_loan_id': loanId,
+              'p_payoff_date': _date(date),
+              'p_mode': rule.code,
+            },
           )
           as Map,
     );
@@ -324,6 +329,7 @@ class SupabaseLoansRepository {
       earnedInterestCentavos: row['earned_interest_centavos'] as int,
       payoffCentavos: row['payoff_centavos'] as int,
       payoffDate: DateTime.parse(row['payoff_date'] as String),
+      rule: rule,
     );
   }
 
@@ -335,6 +341,7 @@ class SupabaseLoansRepository {
     required String reference,
     required String clientOperationId,
     required String deviceId,
+    PayoffRule rule = PayoffRule.waiveFuture,
   }) async =>
       await _client.rpc(
             'record_early_payoff',
@@ -345,6 +352,7 @@ class SupabaseLoansRepository {
               'p_reference': reference,
               'p_client_operation_id': clientOperationId,
               'p_device_id': deviceId,
+              'p_mode': rule.code,
             },
           )
           as String;
