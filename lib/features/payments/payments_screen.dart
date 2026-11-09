@@ -459,34 +459,60 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
     );
   }
 
-  Widget _paymentActions(PaymentSummary payment) => Wrap(
-    spacing: 4,
-    children: [
-      if (payment.status == 'pending') ...[
-        TextButton(
-          onPressed: () => _verify(payment),
-          child: const Text('Verify…'),
-        ),
-        TextButton(
-          onPressed: () => _reject(payment),
-          child: const Text('Reject…'),
-        ),
+  /// Table actions as icons; the tooltip (hover, or long-press on a phone)
+  /// names each one. All of them open a window first.
+  Widget _paymentActions(PaymentSummary payment) {
+    final scheme = Theme.of(context).colorScheme;
+    Widget action(
+      String tooltip,
+      IconData icon,
+      VoidCallback onPressed, {
+      Color? color,
+    }) => IconButton(
+      tooltip: tooltip,
+      visualDensity: VisualDensity.compact,
+      color: color,
+      onPressed: onPressed,
+      icon: Icon(icon),
+    );
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (payment.status == 'pending') ...[
+          action(
+            'Verify…',
+            Icons.check_circle_outline,
+            () => _verify(payment),
+            color: scheme.primary,
+          ),
+          action(
+            'Reject…',
+            Icons.block,
+            () => _reject(payment),
+            color: scheme.error,
+          ),
+        ],
+        if (payment.status == 'verified') ...[
+          action(
+            'Receipt…',
+            Icons.receipt_outlined,
+            () => printFromContext(
+              context,
+              (c) => printPaymentReceipt(c, payment),
+            ),
+          ),
+          action(
+            'Reverse…',
+            Icons.undo,
+            () => _reverse(payment),
+            color: scheme.error,
+          ),
+        ],
+        if (payment.status == 'pending' || payment.status == 'verified')
+          action('Edit…', Icons.edit_outlined, () => _edit(payment)),
       ],
-      if (payment.status == 'verified') ...[
-        TextButton(
-          onPressed: () =>
-              printFromContext(context, (c) => printPaymentReceipt(c, payment)),
-          child: const Text('Receipt…'),
-        ),
-        TextButton(
-          onPressed: () => _reverse(payment),
-          child: const Text('Reverse…'),
-        ),
-      ],
-      if (payment.status == 'pending' || payment.status == 'verified')
-        TextButton(onPressed: () => _edit(payment), child: const Text('Edit…')),
-    ],
-  );
+    );
+  }
 
   /// Fix when it was received, the method or reference (not the amount).
   Future<void> _edit(PaymentSummary payment) async {

@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'backup_dialogs.dart';
 import 'loan_restore.dart';
+import '../../core/widgets/confirm_action.dart';
 import '../../domain/models/models.dart';
 import '../penalties/penalty_widgets.dart';
 import '../../core/widgets/window_title.dart';
@@ -320,6 +321,18 @@ class _StaffRolesDialogState extends State<_StaffRolesDialog> {
                     ],
                     onChanged: (value) async {
                       if (value == null) return;
+                      final ok = await confirmAction(
+                        context,
+                        title: 'Change this person\'s role?',
+                        message:
+                            'They will become ${value[0].toUpperCase()}${value.substring(1)}. '
+                            'What they can see and do changes right away.',
+                        confirmLabel: 'Change Role',
+                      );
+                      if (!ok) {
+                        if (context.mounted) setState(() {});
+                        return;
+                      }
                       try {
                         await Supabase.instance.client.rpc(
                           'set_organization_member_role',

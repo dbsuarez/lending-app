@@ -8,6 +8,8 @@ import '../../core/widgets/info_tip.dart';
 import '../../core/undo/undo_controller.dart';
 import '../../core/formatting.dart';
 import '../../core/widgets/metric_grid.dart';
+import '../../core/widgets/window_title.dart';
+import 'package:go_router/go_router.dart';
 import '../../domain/models/models.dart';
 import '../loans/loans_controller.dart';
 import '../payments/payments_controller.dart';
@@ -156,9 +158,25 @@ class ReportsScreen extends ConsumerWidget {
                         subtitle: Text(
                           '${entry.value.count} payment${entry.value.count == 1 ? '' : 's'}',
                         ),
-                        trailing: Text(
-                          formatPeso(entry.value.amount),
-                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              formatPeso(entry.value.amount),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const Icon(Icons.chevron_right),
+                          ],
+                        ),
+                        onTap: () => _showMethod(
+                          context,
+                          entry.key,
+                          paymentItems
+                              .cast<PaymentSummary>()
+                              .where((p) => p.method == entry.key)
+                              .toList(),
                         ),
                       ),
                   ],
@@ -196,6 +214,100 @@ class ReportsScreen extends ConsumerWidget {
       ],
     );
   }
+
+  /// Details of one payment method: totals by status and its payments.
+  void _showMethod(
+    BuildContext context,
+    String method,
+    List<PaymentSummary> payments,
+  ) {
+    final sorted = [...payments]
+      ..sort((a, b) => b.receivedAt.compareTo(a.receivedAt));
+    int sum(Iterable<PaymentSummary> list) =>
+        list.fold(0, (s, p) => s + p.amountCentavos);
+    Iterable<PaymentSummary> withStatus(String s) =>
+        sorted.where((p) => p.status == s);
+    final now = DateTime.now();
+    final thisMonth = withStatus('verified').where(
+      (p) =>
+          p.receivedAt.toLocal().year == now.year &&
+          p.receivedAt.toLocal().month == now.month,
+    );
+    final rows = <(String, Iterable<PaymentSummary>)>[
+      ('Verified', withStatus('verified')),
+      ('Pending verification', withStatus('pending')),
+      ('Reversed', withStatus('reversed')),
+      ('Rejected', withStatus('rejected')),
+    ].where((r) => r.$2.isNotEmpty);
+    String status(String s) =>
+        s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        final theme = Theme.of(dialogContext);
+        return AlertDialog(
+          scrollable: true,
+          title: WindowTitle(Text(method)),
+          content: SizedBox(
+            width: 460,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (final (label, list) in rows)
+                  _detailLine('$label (${list.length})', formatPeso(sum(list))),
+                _detailLine(
+                  'Verified this month (${thisMonth.length})',
+                  formatPeso(sum(thisMonth)),
+                ),
+                const Divider(height: 24),
+                Text('Payments', style: theme.textTheme.labelLarge),
+                for (final p in sorted.take(30))
+                  ListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      '${formatPeso(p.amountCentavos)} · ${p.borrowerName}',
+                    ),
+                    subtitle: Text(
+                      '${formatPhilippineDateTime(p.receivedAt)} · ${status(p.status)}'
+                      '${p.reference.isEmpty ? '' : ' · ${p.reference}'}',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () {
+                      Navigator.pop(dialogContext);
+                      context.go('/loans/${p.loanId}?from=loans');
+                    },
+                  ),
+                if (sorted.length > 30)
+                  Text(
+                    'Showing the latest 30 of ${sorted.length}. The Payments '
+                    'page lists them all.',
+                    style: theme.textTheme.bodySmall,
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  static Widget _detailLine(String label, String value) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 4),
+    child: Row(
+      children: [
+        Expanded(child: Text(label)),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
+      ],
+    ),
+  );
 
   Future<void> _exportCsv(
     BuildContext context,

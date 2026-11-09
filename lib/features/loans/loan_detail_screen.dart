@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/widgets/confirm_action.dart';
 import '../../core/widgets/menu_label.dart';
 import '../penalties/penalty_widgets.dart';
 import '../documents/evidence_counts.dart';
@@ -262,7 +263,7 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
                 : Icons.person_outline,
           ),
           label: Text(
-            loan.summary.isPersonal ? 'Move to Business' : 'Mark Personal',
+            loan.summary.isPersonal ? 'Move to Business…' : 'Mark Personal…',
           ),
         ),
         if (loan.summary.status == 'draft')
@@ -475,7 +476,7 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
           loan.summary.isPersonal
               ? Icons.business_center_outlined
               : Icons.person_outline,
-          loan.summary.isPersonal ? 'Move to Business' : 'Mark Personal',
+          loan.summary.isPersonal ? 'Move to Business…' : 'Mark Personal…',
           () => _setPersonal(loan),
         ),
         item(
@@ -583,6 +584,18 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
   Future<void> _setPersonal(LoanDetail loan) async {
     final loanId = loan.summary.id;
     final personal = !loan.summary.isPersonal;
+    final ok = await confirmAction(
+      context,
+      title: personal ? 'Mark as a personal loan?' : 'Move to business loans?',
+      message: personal
+          ? 'This loan moves to Personal Loans. It will no longer count in the '
+                'Dashboard, Collections, Payments, Reports, aging or the '
+                'borrower\'s Ongoing tag. You can move it back any time.'
+          : 'This loan moves back to the business loans and counts again in '
+                'the Dashboard, Collections, Payments, Reports and aging.',
+      confirmLabel: personal ? 'Mark Personal' : 'Move to Business',
+    );
+    if (!ok || !mounted) return;
     final changed = await _loans.setPersonal(loanId, personal);
     if (!mounted) return;
     if (changed) {
@@ -1018,6 +1031,18 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
                                     ),
                                   TextButton(
                                     onPressed: () async {
+                                      final ok = await confirmAction(
+                                        dialogContext,
+                                        title: 'Revoke this link?',
+                                        message:
+                                            'The borrower will no longer be '
+                                            'able to open it, and it cannot be '
+                                            'turned back on. You can make a '
+                                            'new link with Get Link.',
+                                        confirmLabel: 'Revoke',
+                                        destructive: true,
+                                      );
+                                      if (!ok) return;
                                       final revoked = await controller
                                           .revokeShareLink(link.id);
                                       if (revoked) {
@@ -1026,7 +1051,7 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
                                         setDialogState(() {});
                                       }
                                     },
-                                    child: const Text('Revoke'),
+                                    child: const Text('Revoke…'),
                                   ),
                                 ],
                               )

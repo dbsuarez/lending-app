@@ -5,6 +5,7 @@ import '../features/dashboard/live_dashboard_screen.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/config/app_config.dart';
 import '../features/settings/business_profile_provider.dart';
+import 'global_search.dart';
 import 'theme/app_theme.dart';
 
 const _nav = [
@@ -76,6 +77,7 @@ class _AppShellState extends ConsumerState<AppShell> {
               onPressed: () => ref.invalidate(liveDashboardProvider),
               icon: const Icon(Icons.refresh),
             ),
+          const GlobalSearch(compact: true),
           IconButton(
             onPressed: () {},
             icon: const Icon(Icons.notifications_none),
@@ -360,7 +362,7 @@ class _AppShellState extends ConsumerState<AppShell> {
   );
 
   Widget _topBar(BuildContext context) => Container(
-    height: 68,
+    height: 56,
     color: Theme.of(context).colorScheme.surface,
     padding: const EdgeInsets.symmetric(horizontal: 20),
     child: Row(
@@ -370,14 +372,7 @@ class _AppShellState extends ConsumerState<AppShell> {
             alignment: Alignment.centerLeft,
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 520),
-              child: SearchBar(
-                elevation: const WidgetStatePropertyAll(0),
-                backgroundColor: WidgetStatePropertyAll(
-                  Theme.of(context).colorScheme.surfaceContainerHighest,
-                ),
-                hintText: 'Search borrower, loan, payment, or reference...',
-                leading: const Icon(Icons.search),
-              ),
+              child: const GlobalSearch(),
             ),
           ),
         ),
