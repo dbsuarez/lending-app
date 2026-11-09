@@ -28,7 +28,8 @@ $buildId = [TimeZoneInfo]::ConvertTimeFromUtc([DateTime]::UtcNow, $tz).ToString(
 $ErrorActionPreference = 'Continue'
 # --pwa-strategy=none: no offline cache, so a deploy shows on the next reload
 # (the default cache kept serving the previous version until a 2nd reload).
-fvm flutter build web --release --pwa-strategy=none `
+# Icon tree-shaking corrupts some glyphs (blank icons); ship the full font.
+fvm flutter build web --release --pwa-strategy=none --no-tree-shake-icons `
   "--dart-define=SUPABASE_URL=$($envMap.SUPABASE_URL)" `
   "--dart-define=SUPABASE_ANON_KEY=$($envMap.SUPABASE_ANON_KEY)" `
   "--dart-define=APP_ENV=production" `

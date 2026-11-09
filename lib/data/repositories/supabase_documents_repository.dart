@@ -76,6 +76,10 @@ class SupabaseDocumentsRepository {
     ];
   }
 
+  /// The file itself, for showing it inside the app.
+  Future<Uint8List> download(String storagePath) =>
+      _client.storage.from('loan-evidence').download(storagePath);
+
   Future<Uri> signedUrl(String storagePath) async => Uri.parse(
     await _client.storage
         .from('loan-evidence')

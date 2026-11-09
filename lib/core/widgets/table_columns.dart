@@ -301,8 +301,8 @@ class ColumnToggle extends ConsumerWidget {
                     controller.isOpen ? controller.close() : controller.open(),
                 icon: Icon(
                   layout.hidden.isEmpty && layout.widths.isEmpty
-                      ? Icons.view_column_outlined
-                      : Icons.view_column,
+                      ? Icons.view_week_outlined
+                      : Icons.view_week,
                 ),
               ),
             ),

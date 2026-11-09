@@ -1,15 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'evidence_counts.dart';
+import 'loan_evidence_section.dart';
 import '../../core/widgets/table_columns.dart';
 import '../../core/preferences/filter_defaults.dart';
-import '../../core/undo/undo_controller.dart';
 import '../../core/formatting.dart';
 import '../../core/widgets/responsive_card_list.dart';
 import '../../core/widgets/app_status_badge.dart';
-import '../../data/repositories/supabase_documents_repository.dart';
 import '../../domain/models/models.dart';
 import '../loans/loans_controller.dart';
 import 'loan_print_menu.dart';
@@ -140,7 +137,12 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
                       for (final loan in items)
                         DataRow(
                           cells: view.cells([
-                            DataCell(Text(_reference(loan.id))),
+                            DataCell(
+                              LoanReferenceWithEvidence(
+                                _reference(loan.id),
+                                loan.id,
+                              ),
+                            ),
                             DataCell(Text(loan.borrowerName)),
                             DataCell(Text(formatPeso(loan.totalCentavos))),
                             DataCell(AppStatusBadge(loan.status)),
@@ -185,101 +187,25 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
     await printLoanDocument(detail, document);
   }
 
-  Future<void> _uploadEvidence(BuildContext context, LoanSummary loan) async {
-    final file = await FilePicker.pickFile(
-      type: FileType.custom,
-      allowedExtensions: const ['pdf', 'jpg', 'jpeg', 'png'],
-    );
-    if (file == null) return;
-    final extension = file.extension?.toLowerCase();
-    final mime = extension == 'pdf'
-        ? 'application/pdf'
-        : extension == 'png'
-        ? 'image/png'
-        : 'image/jpeg';
-    try {
-      final bytes = await file.readAsBytes();
-      await SupabaseDocumentsRepository(
-        Supabase.instance.client,
-      ).uploadEvidence(
-        organizationId: loan.organizationId,
-        loanId: loan.id,
-        documentType: 'disbursement_evidence',
-        originalName: file.name,
-        mimeType: mime,
-        bytes: bytes,
-      );
-      if (context.mounted) {
-        undoOf(context).record('Evidence uploaded to private storage.');
-      }
-    } catch (_) {
-      if (context.mounted) {
-        undoOf(context).record(
-          'Evidence upload failed. Use a PDF, JPG, or PNG no larger than 10 MB.',
-        );
-      }
-    }
-  }
-
-  Future<void> _manageEvidence(BuildContext context, LoanSummary loan) async {
-    final repository = SupabaseDocumentsRepository(Supabase.instance.client);
-    var documents = await repository.fetchForLoan(loan.id);
-    if (!context.mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (_, setDialogState) => AlertDialog(
-          title: const Text('Private loan evidence'),
+  Future<void> _manageEvidence(BuildContext context, LoanSummary loan) =>
+      showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text('${loan.borrowerName} · ${_reference(loan.id)}'),
           content: SizedBox(
-            width: 620,
-            child: documents.isEmpty
-                ? const Text('No evidence has been uploaded for this loan.')
-                : ListView.separated(
-                    shrinkWrap: true,
-                    itemCount: documents.length,
-                    separatorBuilder: (_, _) => const Divider(),
-                    itemBuilder: (_, index) {
-                      final document = documents[index];
-                      return ListTile(
-                        leading: Icon(
-                          document.mimeType == 'application/pdf'
-                              ? Icons.picture_as_pdf
-                              : Icons.image_outlined,
-                        ),
-                        title: Text(document.name),
-                        subtitle: Text(
-                          '${(document.sizeBytes / 1048576).toStringAsFixed(2)} MB · ${formatPhilippineDateTime(document.createdAt)}',
-                        ),
-                        trailing: IconButton(
-                          tooltip: 'Open for 5 minutes',
-                          onPressed: () async => launchUrl(
-                            await repository.signedUrl(document.storagePath),
-                          ),
-                          icon: const Icon(Icons.open_in_new),
-                        ),
-                      );
-                    },
-                  ),
+            width: 720,
+            child: SingleChildScrollView(
+              child: LoanEvidenceSection(loan: loan),
+            ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(dialogContext),
               child: const Text('Close'),
             ),
-            FilledButton.icon(
-              onPressed: () async {
-                await _uploadEvidence(dialogContext, loan);
-                documents = await repository.fetchForLoan(loan.id);
-                setDialogState(() {});
-              },
-              icon: const Icon(Icons.upload_file),
-              label: const Text('Upload Evidence'),
-            ),
           ],
         ),
-      ),
-    );
-  }
+      );
 }
 
 class _DocumentLoanCard extends StatelessWidget {
@@ -297,8 +223,15 @@ class _DocumentLoanCard extends StatelessWidget {
     child: ListTile(
       leading: const Icon(Icons.picture_as_pdf_outlined),
       title: Text(loan.borrowerName),
-      subtitle: Text(
-        '${_reference(loan.id)} · ${formatPeso(loan.totalCentavos)}',
+      subtitle: Row(
+        children: [
+          Flexible(
+            child: Text(
+              '${_reference(loan.id)} · ${formatPeso(loan.totalCentavos)}',
+            ),
+          ),
+          EvidenceBadge(loan.id),
+        ],
       ),
       trailing: PopupMenuButton<String>(
         tooltip: 'Document actions',

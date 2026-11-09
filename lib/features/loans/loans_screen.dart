@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../documents/evidence_counts.dart';
 import '../../core/widgets/table_columns.dart';
 import '../../core/preferences/filter_defaults.dart';
 import '../../core/formatting.dart';
@@ -261,7 +262,7 @@ class _LoansScreenState extends ConsumerState<LoansScreen> {
       '/loans/${loan.id}?from=${widget.personalOnly ? 'personal' : 'loans'}',
     ),
     cells: view.cells([
-      DataCell(Text(_reference(loan.id))),
+      DataCell(LoanReferenceWithEvidence(_reference(loan.id), loan.id)),
       DataCell(Text(loan.borrowerName)),
       DataCell(Text(_borrowedLabel(loan))),
       DataCell(Text(_paidLabel(loan))),
@@ -299,7 +300,12 @@ class _LoanCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 8),
-            Text('Reference: ${_reference(loan.id)}'),
+            Row(
+              children: [
+                Text('Reference: ${_reference(loan.id)}'),
+                EvidenceBadge(loan.id),
+              ],
+            ),
             Text('Borrowed: ${_borrowedLabel(loan)}'),
             Text('Paid: ${_paidLabel(loan)}'),
             const SizedBox(height: 8),

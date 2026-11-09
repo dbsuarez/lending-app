@@ -24,7 +24,8 @@ $buildId = [TimeZoneInfo]::ConvertTimeFromUtc([DateTime]::UtcNow, $tz).ToString(
 "BUILD_ID=$buildId"
 
 $ErrorActionPreference = 'Continue'
-fvm flutter build apk --release --target-platform android-arm64 `
+# Icon tree-shaking corrupts some glyphs (blank icons); ship the full font.
+fvm flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons `
   "--dart-define=SUPABASE_URL=$($envMap.SUPABASE_URL)" `
   "--dart-define=SUPABASE_ANON_KEY=$($envMap.SUPABASE_ANON_KEY)" `
   "--dart-define=APP_ENV=production" `

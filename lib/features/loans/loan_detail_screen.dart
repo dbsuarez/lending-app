@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../documents/evidence_counts.dart';
+import '../documents/loan_evidence_section.dart';
 import '../../core/widgets/table_columns.dart';
 import '../../core/widgets/info_tip.dart';
 import '../../core/config/app_config.dart';
@@ -106,15 +108,23 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
             );
           },
         ),
-        const TabBar(
+        TabBar(
           isScrollable: true,
           tabs: [
-            Tab(text: 'Overview'),
-            Tab(text: 'Schedule'),
-            Tab(text: 'Payment Ledger'),
-            Tab(text: 'Payments'),
-            Tab(text: 'Activity'),
-            Tab(text: 'Documents'),
+            const Tab(text: 'Overview'),
+            const Tab(text: 'Schedule'),
+            const Tab(text: 'Payment Ledger'),
+            const Tab(text: 'Payments'),
+            const Tab(text: 'Activity'),
+            Tab(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Documents'),
+                  EvidenceBadge(loan.summary.id),
+                ],
+              ),
+            ),
           ],
         ),
         Expanded(
@@ -1639,6 +1649,13 @@ class _LoanDocuments extends StatelessWidget {
   Widget build(BuildContext context) => ListView(
     padding: const EdgeInsets.all(24),
     children: [
+      Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: LoanEvidenceSection(loan: loan.summary),
+        ),
+      ),
+      const SizedBox(height: 8),
       Card(
         child: ListTile(
           leading: const Icon(Icons.calendar_month_outlined),
