@@ -4,6 +4,9 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import '../../core/formatting.dart';
 import '../../domain/models/models.dart';
+import '../settings/business_profile_provider.dart';
+
+part 'loan_documents_pdf.dart';
 
 class LoanSchedulePdf {
   const LoanSchedulePdf._();
@@ -15,8 +18,10 @@ class LoanSchedulePdf {
   static Future<Uint8List> build(
     LoanDetail loan, {
     DateTime? generatedOn,
+    BusinessProfile business = BusinessProfile.fallback,
   }) => _render(
     loan,
+    business: business,
     generated: generatedOn ?? DateTime.now(),
     title: 'Loan Schedule - ${loan.summary.borrowerName}',
     subject: 'Installment schedule',
@@ -30,10 +35,12 @@ class LoanSchedulePdf {
   static Future<Uint8List> buildLedger(
     LoanDetail loan, {
     DateTime? generatedOn,
+    BusinessProfile business = BusinessProfile.fallback,
   }) {
     final generated = generatedOn ?? DateTime.now();
     return _render(
       loan,
+      business: business,
       generated: generated,
       title: 'Payment Ledger - ${loan.summary.borrowerName}',
       subject: 'Payment ledger',
@@ -58,6 +65,7 @@ class LoanSchedulePdf {
 
   static Future<Uint8List> _render(
     LoanDetail loan, {
+    required BusinessProfile business,
     required DateTime generated,
     required String title,
     required String subject,
@@ -69,7 +77,7 @@ class LoanSchedulePdf {
   }) async {
     final document = pw.Document(
       title: title,
-      author: 'Lending Manager',
+      author: business.name,
       subject: subject,
     );
     final blue = _blue;
@@ -91,7 +99,7 @@ class LoanSchedulePdf {
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
               pw.Text(
-                'LENDING MANAGER',
+                business.name.toUpperCase(),
                 style: pw.TextStyle(
                   color: blue,
                   fontSize: 18,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../documents/loan_print_menu.dart';
 import '../../core/widgets/table_columns.dart';
 import '../../core/preferences/filter_defaults.dart';
 import '../../core/widgets/info_tip.dart';
@@ -471,11 +472,17 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
           child: const Text('Reject'),
         ),
       ],
-      if (payment.status == 'verified')
+      if (payment.status == 'verified') ...[
+        TextButton(
+          onPressed: () =>
+              printFromContext(context, (c) => printPaymentReceipt(c, payment)),
+          child: const Text('Receipt'),
+        ),
         TextButton(
           onPressed: () => _reverse(payment),
           child: const Text('Reverse'),
         ),
+      ],
       if (payment.status == 'pending' || payment.status == 'verified')
         TextButton(onPressed: () => _edit(payment), child: const Text('Edit')),
     ],

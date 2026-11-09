@@ -184,7 +184,11 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
     final detail = await ref
         .read(loansControllerProvider.notifier)
         .fetchDetail(loan.id);
-    await printLoanDocument(detail, document);
+    if (!mounted) return;
+    await printFromContext(
+      context,
+      (container) => printLoanDocument(container, detail, document),
+    );
   }
 
   Future<void> _manageEvidence(BuildContext context, LoanSummary loan) =>
@@ -235,15 +239,13 @@ class _DocumentLoanCard extends StatelessWidget {
       ),
       trailing: PopupMenuButton<String>(
         tooltip: 'Document actions',
-        onSelected: (value) => switch (value) {
-          'schedule' => onPrint(LoanPrintDocument.schedule),
-          'ledger' => onPrint(LoanPrintDocument.ledger),
-          _ => onEvidence(),
-        },
-        itemBuilder: (_) => const [
-          PopupMenuItem(value: 'evidence', child: Text('Evidence')),
-          PopupMenuItem(value: 'schedule', child: Text('Print loan schedule')),
-          PopupMenuItem(value: 'ledger', child: Text('Print payment ledger')),
+        onSelected: (value) => value == 'evidence'
+            ? onEvidence()
+            : onPrint(LoanPrintDocument.values.byName(value)),
+        itemBuilder: (_) => [
+          const PopupMenuItem(value: 'evidence', child: Text('Evidence')),
+          for (final d in LoanPrintDocument.values)
+            PopupMenuItem(value: d.name, child: Text('Print ${d.label}')),
         ],
       ),
     ),

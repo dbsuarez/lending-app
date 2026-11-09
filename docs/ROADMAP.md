@@ -9,8 +9,8 @@ remain in `LENDING_MANAGER_UI_DESIGN.md`.
 ## Current status
 
 **Active milestone:** Phase 4 — Collections and documents
-**Next deliverable:** Payment receipts, statement of account, loan agreement and
-acknowledgment-of-release PDFs; drafts of the legal documents for review
+**Next deliverable:** Legal review of the drafted agreement and policies; Correct Terms
+for loans with payments
 **Production readiness:** Web and Android are live and current (2026-11-09).
 Open: the remaining PDFs, legal review, and turning on the weekly backup task.
 
@@ -113,7 +113,7 @@ Open: the remaining PDFs, legal review, and turning on the weekly backup task.
 - [x] Record payments with a chosen received date
 - [x] Edit payment date, method and reference (reason required, undo, history)
 - [x] Reason for late payment: prompted when a payment is after its due date, quick picks, editable later, shown in payment lists
-- [ ] Receipt generation based on committed payment status
+- [x] Receipt generation based on committed payment status
 - [x] Encrypted Drift/SQLCipher Android outbox database
 - [x] Idempotent offline collection-activity queue and explicit retry
 - [x] Optimistic conflict detection for mutable borrower edits
@@ -135,10 +135,11 @@ Open: the remaining PDFs, legal review, and turning on the weekly backup task.
 - [x] Evidence on the loan page: categories (release proof, payment proof, late-payment reason / promise, agreement, acknowledgment, other), thumbnails, in-app photo and PDF viewer, change category
 - [x] Paperclip evidence count in the Loans list, Documents page and loan Documents tab
 - [x] Exports open the system "Save to" picker on Android
-- [ ] Payment receipt PDF
-- [ ] Statement of account PDF
-- [ ] Loan agreement PDF (wording pending legal review)
-- [ ] Acknowledgment of money release PDF
+- [x] Payment receipt PDF (A5, verified payments only; amount in words; not a BIR official receipt)
+- [x] Statement of account PDF (balance, past due, amount due now, installments, payments, how to pay)
+- [x] Loan agreement PDF with disclosure and schedule (prints as DRAFT until legal review)
+- [x] Acknowledgment of money release PDF
+- [x] Business name and contacts on every PDF (was "LENDING MANAGER")
 - [ ] Bulk printing of statements
 - [ ] Edit collection notes and promises after saving
 - [ ] Readable (PDF/CSV) borrower data export
@@ -211,12 +212,11 @@ Open: the remaining PDFs, legal review, and turning on the weekly backup task.
 
 ## Next, in order
 
-1. Payment receipt, statement of account, loan agreement and acknowledgment-of-release PDFs.
-2. Drafts of the legal documents (agreement, disclosure statement, privacy notice, collection and penalty policy) for the lawyer.
-3. Legal review; then finalize the agreement wording in the PDF.
-4. Correct Terms for loans that already have payments.
-5. Edit collection notes and promises; phone cards follow hidden columns; bulk statements; readable borrower export.
-6. Owner: turn on the weekly backup task.
+1. Drafts of the legal documents (agreement, disclosure statement, privacy notice, collection and penalty policy) for the lawyer.
+2. Legal review; then finalize the agreement wording in the PDF.
+3. Correct Terms for loans that already have payments.
+4. Edit collection notes and promises; phone cards follow hidden columns; bulk statements; readable borrower export.
+5. Owner: turn on the weekly backup task.
 
 Rules for this work: [WEB_ICONS_AND_CACHING.md](WEB_ICONS_AND_CACHING.md),
 [BACKUP_AND_RESTORE.md](BACKUP_AND_RESTORE.md), [DEPLOYMENT.md](DEPLOYMENT.md).

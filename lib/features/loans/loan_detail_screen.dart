@@ -1589,6 +1589,15 @@ class _LoanPaymentsState extends ConsumerState<_LoanPayments> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   AppStatusBadge(item.status),
+                  if (item.status == 'verified')
+                    IconButton(
+                      tooltip: 'Payment receipt (PDF)',
+                      onPressed: () => printFromContext(
+                        context,
+                        (c) => printPaymentReceipt(c, item),
+                      ),
+                      icon: const Icon(Icons.receipt_outlined),
+                    ),
                   if (editable)
                     IconButton(
                       tooltip: 'Edit date, method, reference or late reason',
@@ -1671,8 +1680,10 @@ class _LoanDocuments extends StatelessWidget {
             'A4 installment schedule for printing or saving as PDF.',
           ),
           trailing: FilledButton.icon(
-            onPressed: () =>
-                printLoanDocument(loan, LoanPrintDocument.schedule),
+            onPressed: () => printFromContext(
+              context,
+              (c) => printLoanDocument(c, loan, LoanPrintDocument.schedule),
+            ),
             icon: const Icon(Icons.print_outlined),
             label: const Text('Print'),
           ),
@@ -1687,12 +1698,48 @@ class _LoanDocuments extends StatelessWidget {
             'A4 ledger of payments and running balance, for printing or saving as PDF.',
           ),
           trailing: FilledButton.icon(
-            onPressed: () => printLoanDocument(loan, LoanPrintDocument.ledger),
+            onPressed: () => printFromContext(
+              context,
+              (c) => printLoanDocument(c, loan, LoanPrintDocument.ledger),
+            ),
             icon: const Icon(Icons.print_outlined),
             label: const Text('Print'),
           ),
         ),
       ),
+      for (final (document, text) in [
+        (
+          LoanPrintDocument.statement,
+          'Balance, amount due now, installments and payments received, with '
+              'how to pay.',
+        ),
+        (
+          LoanPrintDocument.agreement,
+          'Loan agreement with disclosure and schedule, for signing. Draft '
+              'wording until reviewed by a lawyer.',
+        ),
+        (
+          LoanPrintDocument.acknowledgment,
+          'The borrower signs that they received the loan money.',
+        ),
+      ]) ...[
+        const SizedBox(height: 8),
+        Card(
+          child: ListTile(
+            leading: Icon(document.icon),
+            title: Text(document.label),
+            subtitle: Text(text),
+            trailing: FilledButton.icon(
+              onPressed: () => printFromContext(
+                context,
+                (c) => printLoanDocument(c, loan, document),
+              ),
+              icon: const Icon(Icons.print_outlined),
+              label: const Text('Print'),
+            ),
+          ),
+        ),
+      ],
       const SizedBox(height: 8),
       Card(
         child: ListTile(
