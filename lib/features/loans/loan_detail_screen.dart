@@ -39,20 +39,26 @@ class LoanDetailScreen extends ConsumerStatefulWidget {
 class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
   late Future<LoanDetail> detail;
 
+  /// The payment that settled this loan early, if it still stands.
+  String? _payoffPaymentId;
+
   @override
   void initState() {
     super.initState();
-    detail = ref
-        .read(loansControllerProvider.notifier)
-        .fetchDetail(widget.loanId);
+    detail = _load();
+  }
+
+  Future<LoanDetail> _load() async {
+    final loans = ref.read(loansControllerProvider.notifier);
+    final loaded = await loans.fetchDetail(widget.loanId);
+    _payoffPaymentId = loaded.summary.status == 'fully_paid'
+        ? await loans.fetchEarlyPayoffPaymentId(widget.loanId)
+        : null;
+    return loaded;
   }
 
   void _reload() {
-    setState(() {
-      detail = ref
-          .read(loansControllerProvider.notifier)
-          .fetchDetail(widget.loanId);
-    });
+    setState(() => detail = _load());
   }
 
   @override
@@ -196,11 +202,28 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.headlineSmall,
           ),
-          Text(
-            _reference(loan.summary.id),
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _reference(loan.summary.id),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              IconButton(
+                tooltip: 'Copy loan number',
+                visualDensity: VisualDensity.compact,
+                iconSize: 16,
+                onPressed: () async {
+                  await Clipboard.setData(
+                    ClipboardData(text: _reference(loan.summary.id)),
+                  );
+                  _undo.notify('Copied ${_reference(loan.summary.id)}.');
+                },
+                icon: const Icon(Icons.copy),
+              ),
+            ],
           ),
         ],
       );
@@ -309,7 +332,7 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
             ),
           ),
         ],
-        if (loan.summary.status == 'fully_paid')
+        if (loan.summary.status == 'fully_paid' && _payoffPaymentId != null)
           OutlinedButton.icon(
             onPressed: () => _undoPayoff(loan),
             icon: const Icon(Icons.undo),
@@ -440,7 +463,7 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
             () => _earlyPayoff(loan),
           ),
         ],
-        if (status == 'fully_paid')
+        if (status == 'fully_paid' && _payoffPaymentId != null)
           item(Icons.undo, 'Undo Early Payoff', () => _undoPayoff(loan)),
         item(
           loan.summary.isPersonal
