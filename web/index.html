@@ -31,6 +31,30 @@
 
   <title>Lending Manager</title>
   <link rel="manifest" href="manifest.json">
+  <script>
+    // Older versions installed a service worker that keeps serving stale
+    // files (an old icon font showed blank icons). Remove it and its caches,
+    // then reload once so everything comes fresh from the server.
+    (function () {
+      if (!('serviceWorker' in navigator)) return;
+      var controlled = !!navigator.serviceWorker.controller;
+      navigator.serviceWorker.getRegistrations().then(function (regs) {
+        return Promise.all(regs.map(function (r) { return r.unregister(); }));
+      }).then(function () {
+        if (!window.caches) return;
+        return caches.keys().then(function (keys) {
+          return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+        });
+      }).then(function () {
+        try {
+          if (controlled && !sessionStorage.getItem('lm-sw-cleared')) {
+            sessionStorage.setItem('lm-sw-cleared', '1');
+            location.reload();
+          }
+        } catch (e) {}
+      });
+    })();
+  </script>
 </head>
 <body>
   <script src="flutter_bootstrap.js" async></script>

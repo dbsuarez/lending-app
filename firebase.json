@@ -15,7 +15,7 @@
         ]
       },
       {
-        "source": "/@(index.html|status.html|main.dart.js|flutter_bootstrap.js|flutter_service_worker.js|version.json)",
+        "source": "/@(index.html|status.html|main.dart.js|flutter_bootstrap.js|flutter_service_worker.js|version.json|app_build.json)",
         "headers": [
           { "key": "Cache-Control", "value": "no-cache,no-store,must-revalidate" }
         ]

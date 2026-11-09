@@ -38,6 +38,19 @@ fvm flutter build web --release --pwa-strategy=none --no-tree-shake-icons `
 if ($LASTEXITCODE -ne 0) { throw "flutter build failed ($LASTEXITCODE)" }
 $ErrorActionPreference = 'Stop'
 
+# Replace the (empty) service worker with one that removes old ones and their
+# stale caches from browsers that visited earlier versions.
+Copy-Item web\sw_kill_switch.js build\web\flutter_service_worker.js -Force
+Remove-Item build\web\sw_kill_switch.js -ErrorAction SilentlyContinue
+# Version for the once-per-version fresh fetch of fonts in flutter_bootstrap.js.
+$boot = 'build\web\flutter_bootstrap.js'
+$bootText = [IO.File]::ReadAllText($boot)
+if (-not $bootText.Contains('__BUILD_ID__')) { throw "$boot is missing __BUILD_ID__" }
+[IO.File]::WriteAllText($boot, $bootText.Replace('__BUILD_ID__', $buildId), (New-Object Text.UTF8Encoding $false))
+
+# The running app compares its build with this file to offer updates.
+[IO.File]::WriteAllText('build\web\app_build.json', "{`"build_id`":`"$buildId`"}", (New-Object Text.UTF8Encoding $false))
+
 $statusPage = 'build\web\status.html'
 $html = [IO.File]::ReadAllText($statusPage)
 if (-not $html.Contains('__SUPABASE_URL__') -or -not $html.Contains('__SUPABASE_ANON_KEY__')) {

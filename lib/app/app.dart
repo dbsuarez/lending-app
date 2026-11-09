@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../core/update/update_checker.dart';
 import '../core/config/app_config.dart';
 import '../features/auth/login_screen.dart';
 import '../features/borrowers/borrowers_screen.dart';
@@ -110,9 +111,12 @@ class LendingManagerApp extends ConsumerWidget {
       // App-wide so transaction/undo messages persist across navigation.
       scaffoldMessengerKey: rootScaffoldMessengerKey,
       // Fingerprint/face lock over the whole app (Android only in practice).
-      builder: (context, child) => AppLockGate(
-        onUsePassword: () => _router.go('/login'),
-        child: child ?? const SizedBox.shrink(),
+      // Web: offers to update when a newer version has been published.
+      builder: (context, child) => UpdateChecker(
+        child: AppLockGate(
+          onUsePassword: () => _router.go('/login'),
+          child: child ?? const SizedBox.shrink(),
+        ),
       ),
     );
   }
