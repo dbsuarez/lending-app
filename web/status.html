@@ -104,6 +104,55 @@
       border: 1px solid #c8d4e3; border-radius: 999px; padding: 7px 14px; min-height: 36px;
     }
     .skeleton { height: 78px; border-radius: 14px; background: var(--card); border: 1px solid var(--border); opacity: .6; }
+    .due {
+      border-radius: 14px; padding: 14px 16px; margin: 0 0 12px; border: 1px solid var(--border);
+      background: var(--card); display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; align-items: center;
+    }
+    .due .what { font-weight: 800; font-size: 15px; }
+    .due .when { color: var(--muted); font-size: 13px; grid-column: 1 / -1; }
+    .due .how-much { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; text-align: right; }
+    .due.overdue { background: var(--overdue-bg); border-color: var(--overdue); }
+    .due.overdue .how-much, .due.overdue .what { color: var(--overdue); }
+    .due.ok { background: var(--primary-soft); border-color: var(--primary); }
+    .due.ok .how-much { color: var(--primary); }
+    .due.done { background: var(--paid-bg); border-color: var(--paid); }
+    .due.done .what { color: var(--paid); }
+    .badge.due_today { color: var(--partial); background: var(--partial-bg); }
+    .terms { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 6px 14px; }
+    .terms dl { display: grid; grid-template-columns: 1fr auto; gap: 0; margin: 0; }
+    .terms dt, .terms dd { margin: 0; padding: 9px 0; border-bottom: 1px solid var(--border); }
+    .terms dt { color: var(--muted); }
+    .terms dd { font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+    .terms dl > :nth-last-child(-n+2) { border-bottom: 0; }
+    .terms p { color: var(--muted); font-size: 13px; margin: 8px 0; }
+    .row .receipt {
+      grid-column: 1 / -1; justify-self: start; margin-top: 4px; font: inherit; font-size: 13px; font-weight: 700;
+      color: var(--primary); background: none; border: 1px solid var(--border); border-radius: 999px;
+      padding: 6px 12px; cursor: pointer; min-height: 34px;
+    }
+    .contact { margin-top: 6px; }
+    .contact a { color: var(--primary); font-weight: 700; text-decoration: none; }
+    dialog#receipt { border: 0; border-radius: 14px; padding: 0; max-width: 420px; width: calc(100% - 32px); }
+    dialog#receipt::backdrop { background: rgba(10, 20, 40, .55); }
+    .rc { background: #fff; color: #15223b; padding: 20px; }
+    .rc .biz { font-weight: 800; color: #1463f3; font-size: 18px; }
+    .rc .biz-sub { color: #5b6b86; font-size: 12px; }
+    .rc h3 { margin: 12px 0 2px; font-size: 13px; letter-spacing: .05em; color: #1463f3; border-top: 2px solid #1463f3; padding-top: 10px; }
+    .rc .amt { font-size: 28px; font-weight: 800; color: #1463f3; margin: 6px 0 2px; }
+    .rc dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 12px 0; font-size: 14px; }
+    .rc dt { color: #5b6b86; } .rc dd { margin: 0; font-weight: 600; white-space: pre-line; }
+    .rc small { color: #5b6b86; font-size: 11px; display: block; margin-top: 10px; }
+    .rc-actions { display: flex; gap: 8px; justify-content: flex-end; padding: 12px 20px 18px; background: #fff; }
+    .rc-actions button {
+      font: inherit; font-weight: 700; border-radius: 999px; padding: 9px 16px; cursor: pointer; min-height: 40px;
+      border: 1px solid #c8d4e3; background: #fff; color: #1463f3;
+    }
+    .rc-actions button.primary { background: #1463f3; color: #fff; border-color: #1463f3; }
+    @media print {
+      body > *:not(dialog) { display: none !important; }
+      dialog#receipt { position: static; display: block; box-shadow: none; max-width: none; width: 100%; }
+      .rc-actions { display: none; }
+    }
   </style>
 </head>
 <body>
@@ -127,6 +176,11 @@
     <section id="content" hidden>
       <p class="hello" id="hello"></p>
       <p class="sub" id="reference"></p>
+      <div class="due" id="due" hidden>
+        <span class="what" id="due-what"></span>
+        <span class="how-much" id="due-amount"></span>
+        <span class="when" id="due-when"></span>
+      </div>
       <div class="metrics">
         <div class="metric"><span class="label">Total repayable</span><span class="value" id="m-total"></span></div>
         <div class="metric"><span class="label">Verified payments</span><span class="value" id="m-paid"></span></div>
@@ -137,9 +191,11 @@
       <div class="tabs" role="tablist">
         <button type="button" role="tab" id="tab-schedule" aria-controls="schedule" aria-selected="true">Payment Schedule</button>
         <button type="button" role="tab" id="tab-history" aria-controls="history" aria-selected="false">Payment History</button>
+        <button type="button" role="tab" id="tab-terms" aria-controls="terms" aria-selected="false">Loan Terms</button>
       </div>
       <div id="schedule" class="list" role="tabpanel" aria-labelledby="tab-schedule"></div>
       <div id="history" class="list" role="tabpanel" aria-labelledby="tab-history" hidden></div>
+      <div id="terms" class="terms" role="tabpanel" aria-labelledby="tab-terms" hidden></div>
 
       <section class="pay" aria-labelledby="pay-title">
         <h2 id="pay-title">How to pay</h2>
@@ -174,7 +230,16 @@
   <footer id="footer" hidden>
     This read-only page remains available until the lender revokes its link.
     Contact the lender if a payment or balance appears incorrect.
+    <div class="contact" id="contact"></div>
   </footer>
+
+  <dialog id="receipt" aria-labelledby="rc-title">
+    <div class="rc" id="rc-body"></div>
+    <div class="rc-actions">
+      <button type="button" id="rc-close">Close</button>
+      <button type="button" class="primary" id="rc-print">Save as PDF / Print</button>
+    </div>
+  </dialog>
 
   <script>
     (function () {
@@ -228,7 +293,94 @@
         $('error').hidden = false;
       }
 
+      var current = null;
+      var plural = function (n, word) { return n + ' ' + word + (n === 1 ? '' : 's'); };
+      var daysBetween = function (fromIso, toIso) {
+        return Math.round((Date.parse(dateOnly(toIso)) - Date.parse(dateOnly(fromIso))) / 86400000);
+      };
+
+      // Top banner: what to pay and by when.
+      function renderDue(loan) {
+        var box = $('due');
+        box.className = 'due';
+        if (loan.loan_status === 'fully_paid' || (loan.outstanding_centavos === 0 && loan.loan_status === 'active')) {
+          box.classList.add('done');
+          $('due-what').textContent = 'Fully paid. Thank you!';
+          $('due-amount').textContent = '';
+          $('due-when').textContent = '';
+          box.hidden = false;
+          return;
+        }
+        if (loan.loan_status !== 'active') { box.hidden = true; return; }
+        var next = loan.next_due;
+        if (loan.amount_due_now_centavos > 0) {
+          box.classList.add(loan.past_due_centavos > 0 ? 'overdue' : 'ok');
+          $('due-what').textContent = loan.past_due_centavos > 0 ? 'Amount due now' : 'Due today';
+          $('due-amount').textContent = money(loan.amount_due_now_centavos);
+          var parts = [];
+          if (loan.past_due_centavos > 0) parts.push(money(loan.past_due_centavos) + ' overdue (' + plural(loan.days_past_due, 'day') + ')');
+          if (next && next.due_date !== loan.today) parts.push('Next: ' + money(next.amount_centavos) + ' on ' + dateOnly(next.due_date));
+          $('due-when').textContent = parts.join(' · ');
+        } else if (next) {
+          box.classList.add('ok');
+          var inDays = daysBetween(loan.today, next.due_date);
+          $('due-what').textContent = 'Next payment';
+          $('due-amount').textContent = money(next.amount_centavos);
+          $('due-when').textContent = 'Due ' + dateOnly(next.due_date) + (inDays > 0 ? ' (in ' + plural(inDays, 'day') + ')' : '');
+        } else { box.hidden = true; return; }
+        box.hidden = false;
+      }
+
+      function renderTerms(loan) {
+        var t = loan.terms || {};
+        var box = $('terms');
+        box.replaceChildren();
+        var dl = el('dl');
+        function line(label, value) { if (value == null || value === '') return; dl.appendChild(el('dt', null, label)); dl.appendChild(el('dd', null, value)); }
+        line('Amount borrowed', money(loan.principal_centavos));
+        if (loan.release) line('Released to you', money(loan.release.amount_centavos) + ' on ' + dateOnly(loan.release.released_on));
+        if (t.monthly_rate_basis_points != null) {
+          line('Interest', (t.monthly_rate_basis_points / 100).toFixed(2) + '% per month, flat, for ' + plural(t.term_months, 'month'));
+          line('Total interest', money(t.interest_centavos));
+        }
+        line('Total to repay', money(loan.total_centavos));
+        if (t.installment_count) line('Installments', String(t.installment_count));
+        line('Penalties or late charges', 'None');
+        if (loan.payoff_today_centavos != null && loan.loan_status === 'active') line('To pay everything off today', money(loan.payoff_today_centavos));
+        box.appendChild(dl);
+        box.appendChild(el('p', null,
+          'Payments go to the oldest unpaid installment first. You may pay everything early: interest on installments not yet due is waived. ' +
+          'Ask us before paying off early so we can confirm the exact amount.'));
+      }
+
+      function showReceipt(item) {
+        var loan = current;
+        var biz = (loan.business && loan.business.name) || $('business').textContent;
+        var body = $('rc-body');
+        body.replaceChildren();
+        body.appendChild(el('div', 'biz', biz));
+        var contact = [loan.business && loan.business.phone, loan.business && loan.business.email].filter(Boolean).join(' · ');
+        if (contact) body.appendChild(el('div', 'biz-sub', contact));
+        var h = el('h3', null, 'PAYMENT RECEIPT'); h.id = 'rc-title'; body.appendChild(h);
+        body.appendChild(el('div', 'biz-sub', item.receipt_no));
+        body.appendChild(el('div', null, 'Received from ' + loan.borrower));
+        body.appendChild(el('div', 'amt', money(item.amount_centavos)));
+        var dl = el('dl');
+        function line(label, value) { if (!value) return; dl.appendChild(el('dt', null, label)); dl.appendChild(el('dd', null, value)); }
+        line('For loan', loan.loan_reference);
+        line('Date received', dateTime(item.received_at));
+        line('Method', item.method);
+        line('Reference', item.reference_last4 ? '•••• ' + item.reference_last4 : '');
+        line('Applied to', (item.applied || []).map(function (a) { return 'Installment ' + a.sequence + ': ' + money(a.amount_centavos); }).join('\n'));
+        line('Balance now', money(loan.outstanding_centavos) + ' (as of ' + dateOnly(loan.today) + ')');
+        body.appendChild(dl);
+        body.appendChild(el('small', null, 'This receipt confirms a payment recorded and verified in our books. It is an acknowledgment for your records and not a BIR-registered official receipt.'));
+        $('receipt').showModal();
+      }
+
       function render(loan, businessName) {
+        current = loan;
+        if (!businessName && loan.business) businessName = loan.business.name;
         if (businessName) {
           $('business').textContent = businessName;
           document.title = businessName + ' - Loan Status';
@@ -241,6 +393,19 @@
         $('m-paid').textContent = money(loan.verified_paid_centavos);
         $('m-pending').textContent = money(loan.pending_centavos);
         $('m-balance').textContent = money(loan.outstanding_centavos);
+        renderDue(loan);
+        renderTerms(loan);
+        var biz = loan.business || {};
+        var contact = $('contact');
+        contact.replaceChildren();
+        if (biz.phone || biz.email) {
+          contact.appendChild(document.createTextNode('Questions? '));
+          if (biz.phone) {
+            var tel = el('a', null, biz.phone); tel.href = 'tel:' + biz.phone.replace(/[^0-9+]/g, ''); contact.appendChild(tel);
+          }
+          if (biz.phone && biz.email) contact.appendChild(document.createTextNode(' · '));
+          if (biz.email) { var mail = el('a', null, biz.email); mail.href = 'mailto:' + biz.email; contact.appendChild(mail); }
+        }
 
         var schedule = $('schedule');
         schedule.replaceChildren();
@@ -249,8 +414,10 @@
           row.appendChild(el('span', 'seq', String(item.sequence)));
           row.appendChild(el('span', 'main', dateOnly(item.due_date)));
           row.appendChild(el('span', 'amount', money(item.scheduled_centavos)));
-          var paid = item.paid_centavos > 0 && item.status !== 'paid' ? ' · ' + money(item.paid_centavos) + ' paid' : '';
-          row.appendChild(el('span', 'meta', 'Due date' + paid));
+          var owed = item.outstanding_centavos != null ? item.outstanding_centavos : item.scheduled_centavos - item.paid_centavos;
+          var meta = item.status === 'paid' ? 'Paid in full'
+            : (item.paid_centavos > 0 ? money(item.paid_centavos) + ' paid · ' : '') + money(owed) + ' still owed';
+          row.appendChild(el('span', 'meta', meta));
           row.appendChild(el('span', 'badge ' + item.status, label(item.status)));
           schedule.appendChild(row);
         });
@@ -262,8 +429,17 @@
           var row = el('div', 'row no-seq');
           row.appendChild(el('span', 'main', dateTime(item.received_at)));
           row.appendChild(el('span', 'amount', money(item.amount_centavos)));
-          row.appendChild(el('span', 'meta', item.method));
+          var details = [item.method];
+          if (item.reference_last4) details.push('Ref •••• ' + item.reference_last4);
+          if (item.receipt_no) details.push(item.receipt_no);
+          row.appendChild(el('span', 'meta', details.join(' · ')));
           row.appendChild(el('span', 'badge ' + item.status, label(item.status)));
+          if (item.receipt_no) {
+            var btn = el('button', 'receipt', 'View receipt');
+            btn.type = 'button';
+            btn.addEventListener('click', function () { showReceipt(item); });
+            row.appendChild(btn);
+          }
           history.appendChild(row);
         });
         if (!history.children.length) history.appendChild(el('p', 'empty', 'No payment records to display yet.'));
@@ -295,14 +471,17 @@
           .then(function () { $('refresh').disabled = false; });
       }
 
-      function selectTab(showSchedule) {
-        $('tab-schedule').setAttribute('aria-selected', String(showSchedule));
-        $('tab-history').setAttribute('aria-selected', String(!showSchedule));
-        $('schedule').hidden = !showSchedule;
-        $('history').hidden = showSchedule;
+      function selectTab(which) {
+        ['schedule', 'history', 'terms'].forEach(function (name) {
+          $('tab-' + name).setAttribute('aria-selected', String(name === which));
+          $(name).hidden = name !== which;
+        });
       }
-      $('tab-schedule').addEventListener('click', function () { selectTab(true); });
-      $('tab-history').addEventListener('click', function () { selectTab(false); });
+      ['schedule', 'history', 'terms'].forEach(function (name) {
+        $('tab-' + name).addEventListener('click', function () { selectTab(name); });
+      });
+      $('rc-close').addEventListener('click', function () { $('receipt').close(); });
+      $('rc-print').addEventListener('click', function () { window.print(); });
       $('refresh').addEventListener('click', load);
       load();
     })();

@@ -153,6 +153,11 @@ Open: the remaining PDFs, legal review, and turning on the weekly backup task.
 - [x] Public RPC uses hashed tokens; raw tokens are never stored
 - [x] Link access timestamp and creation audit event
 - [x] Link-management list with explicit revocation action
+- [x] Amount due now / overdue days / next payment banner
+- [x] Schedule shows still owed per installment and Overdue / Due today / Upcoming
+- [x] Loan Terms tab: amount, release, flat rate, interest, installments, no penalties, payoff amount today
+- [x] Payment history with receipt numbers, last 4 of the reference, and a printable receipt
+- [x] Business phone and email on the page; spreadsheet import notes never shown
 
 ## Settings and operations
 
