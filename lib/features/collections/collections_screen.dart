@@ -4,8 +4,10 @@ import 'package:flutter/services.dart';
 import '../../core/preferences/filter_defaults.dart';
 import '../../core/undo/undo_controller.dart';
 import '../../core/formatting.dart';
+import '../../core/widgets/confirm_action.dart';
 import '../../domain/models/models.dart';
 import '../loans/loans_controller.dart';
+import '../settings/business_profile_provider.dart';
 import 'collections_controller.dart';
 
 final _queueFilterProvider = NotifierProvider<_QueueFilter, String>(
@@ -370,11 +372,11 @@ class _Queue extends ConsumerWidget {
   }
 }
 
-class _History extends StatelessWidget {
+class _History extends ConsumerWidget {
   const _History(this.activities);
   final AsyncValue<List<CollectionActivity>> activities;
   @override
-  Widget build(BuildContext context) => activities.when(
+  Widget build(BuildContext context, WidgetRef ref) => activities.when(
     loading: () => const Center(child: CircularProgressIndicator()),
     error: (_, _) =>
         const Center(child: Text('Activity history could not be loaded.')),
@@ -403,26 +405,71 @@ class _History extends StatelessWidget {
                     '${formatPhilippineDateTime(item.contactedAt)}$promise${item.notes.isEmpty ? '' : '\n${item.notes}'}',
                   ),
                   isThreeLine: promise.isNotEmpty || item.notes.isNotEmpty,
+                  trailing: PopupMenuButton<String>(
+                    tooltip: 'Activity actions',
+                    onSelected: (action) => action == 'edit'
+                        ? _edit(context, ref, item)
+                        : _delete(context, ref, item),
+                    itemBuilder: (_) => [
+                      const PopupMenuItem(value: 'edit', child: Text('Edit…')),
+                      if ({'owner', 'manager'}.contains(
+                        ref.read(businessProfileProvider).value?.role,
+                      ))
+                        const PopupMenuItem(
+                          value: 'delete',
+                          child: Text('Delete…'),
+                        ),
+                    ],
+                  ),
                 );
               },
             ),
           ),
   );
+
+  Future<void> _edit(BuildContext context, WidgetRef ref, CollectionActivity item) async {
+    final loans = ref.read(loansControllerProvider).value ?? const <LoanSummary>[];
+    LoanSummary? loan;
+    for (final candidate in loans) { if (candidate.id == item.loanId) loan = candidate; }
+    if (loan == null) return;
+    final values = await showDialog<_ActivityValues>(context: context, builder: (_) => _ActivityDialog(loan!, initial: item));
+    if (values == null) return;
+    final ok = await ref.read(collectionsControllerProvider.notifier).updateActivity(item, type: values.type, outcome: values.outcome, notes: values.notes, promisedOn: values.promisedOn, promisedAmountCentavos: values.promisedAmountCentavos);
+    if (context.mounted) undoOf(context).record(ok ? 'Collection activity updated.' : 'Activity could not be updated.');
+  }
+
+  Future<void> _delete(BuildContext context, WidgetRef ref, CollectionActivity item) async {
+    final confirmed = await confirmAction(context, title: 'Delete collection activity?', message: 'This removes the activity from the working history. An audit record is retained.', confirmLabel: 'Delete Activity', destructive: true);
+    if (!confirmed || !context.mounted) return;
+    final ok = await ref.read(collectionsControllerProvider.notifier).deleteActivity(item.id);
+    if (context.mounted) undoOf(context).record(ok ? 'Collection activity deleted.' : 'Activity could not be deleted.');
+  }
 }
 
 class _ActivityDialog extends StatefulWidget {
-  const _ActivityDialog(this.loan);
+  const _ActivityDialog(this.loan, {this.initial});
   final LoanSummary loan;
+  final CollectionActivity? initial;
   @override
   State<_ActivityDialog> createState() => _ActivityDialogState();
 }
 
 class _ActivityDialogState extends State<_ActivityDialog> {
-  String type = 'call';
+  late String type;
   final outcome = TextEditingController();
   final notes = TextEditingController();
   final amount = TextEditingController();
-  DateTime promisedOn = DateTime.now().add(const Duration(days: 7));
+  late DateTime promisedOn;
+  @override
+  void initState() {
+    super.initState();
+    final initial = widget.initial;
+    type = initial?.type ?? 'call';
+    outcome.text = initial?.outcome ?? '';
+    notes.text = initial?.notes ?? '';
+    if (initial?.promisedAmountCentavos != null) amount.text = (initial!.promisedAmountCentavos! / 100).toStringAsFixed(2);
+    promisedOn = initial?.promisedOn ?? DateTime.now().add(const Duration(days: 7));
+  }
   @override
   void dispose() {
     outcome.dispose();
@@ -433,7 +480,9 @@ class _ActivityDialogState extends State<_ActivityDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: Text('Collection activity · ${widget.loan.borrowerName}'),
+    title: Text(
+      '${widget.initial == null ? 'Collection activity' : 'Edit activity'} · ${widget.loan.borrowerName}',
+    ),
     content: SizedBox(
       width: 480,
       child: SingleChildScrollView(

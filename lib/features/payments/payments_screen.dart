@@ -33,6 +33,8 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
   final Set<String> selected = {};
   int sortColumnIndex = 0;
   bool sortAscending = false;
+  int page = 0;
+  int pageSize = 20;
 
   @override
   Widget build(BuildContext context) {
@@ -205,7 +207,12 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
     }
     // Only pending payments that are visible right now can be bulk-verified,
     // so nothing hidden by search or filters is verified by accident.
-    final pending = payments.where((p) => p.status == 'pending').toList();
+    final pageCount = (payments.length / pageSize).ceil();
+    if (page >= pageCount) page = pageCount - 1;
+    if (page < 0) page = 0;
+    final start = page * pageSize;
+    final pagePayments = payments.skip(start).take(pageSize).toList();
+    final pending = pagePayments.where((p) => p.status == 'pending').toList();
     final chosen = pending.where((p) => selected.contains(p.id)).toList();
     void toggle(PaymentSummary payment, bool on) => setState(
       () => on ? selected.add(payment.id) : selected.remove(payment.id),
@@ -213,17 +220,17 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
     final list = LayoutBuilder(
       builder: (context, constraints) => constraints.maxWidth < 760
           ? ResponsiveCardList(
-              itemCount: payments.length,
+              itemCount: pagePayments.length,
               itemBuilder: (_, index) => _PaymentCard(
-                payments[index],
-                selected: payments[index].status == 'pending'
-                    ? selected.contains(payments[index].id)
+                pagePayments[index],
+                selected: pagePayments[index].status == 'pending'
+                    ? selected.contains(pagePayments[index].id)
                     : null,
-                onSelected: (on) => toggle(payments[index], on),
-                onVerify: () => _verify(payments[index]),
-                onReject: () => _reject(payments[index]),
-                onReverse: () => _reverse(payments[index]),
-                onEdit: () => _edit(payments[index]),
+                onSelected: (on) => toggle(pagePayments[index], on),
+                onVerify: () => _verify(pagePayments[index]),
+                onReject: () => _reject(pagePayments[index]),
+                onReverse: () => _reverse(pagePayments[index]),
+                onEdit: () => _edit(pagePayments[index]),
               ),
             )
           : ColumnToggle(
@@ -264,7 +271,7 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
                       const DataColumn(label: Text('Actions')),
                     ]),
                     rows: [
-                      for (final payment in payments)
+                      for (final payment in pagePayments)
                         DataRow(
                           selected: selected.contains(payment.id),
                           onSelectChanged: payment.status == 'pending'
@@ -342,6 +349,28 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
             ),
           ),
         Expanded(child: list),
+        const SizedBox(height: 8),
+        Wrap(
+          alignment: WrapAlignment.end,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 4,
+          runSpacing: 4,
+          children: [
+            Text('${start + 1}–${start + pagePayments.length} of ${payments.length}'),
+            const SizedBox(width: 12),
+            Tooltip(
+              message: 'Rows per page',
+              child: DropdownButton<int>(
+                value: pageSize,
+                items: const [10, 20, 50].map((size) => DropdownMenuItem(value: size, child: Text('$size rows'))).toList(),
+                onChanged: (size) => setState(() { pageSize = size!; page = 0; selected.clear(); }),
+              ),
+            ),
+            IconButton(tooltip: 'Previous page', onPressed: page == 0 ? null : () => setState(() { page--; selected.clear(); }), icon: const Icon(Icons.chevron_left)),
+            Text('${page + 1} / $pageCount'),
+            IconButton(tooltip: 'Next page', onPressed: page + 1 >= pageCount ? null : () => setState(() { page++; selected.clear(); }), icon: const Icon(Icons.chevron_right)),
+          ],
+        ),
       ],
     );
   }

@@ -206,7 +206,7 @@
           <span id="pay-ref">Put your loan reference in the note, then send us the
           transaction reference number.</span>
         </p>
-        <div class="qrs">
+        <div class="qrs" id="payment-qrs">
           <figure class="qr" style="margin:0">
             <img src="/assets/assets/payment_qr/gcash.png" alt="GCash InstaPay QR code" loading="lazy">
             <span class="name">GCash</span>
@@ -467,8 +467,15 @@
           return;
         }
         $('refresh').disabled = true;
-        Promise.all([rpc('get_shared_loan_status'), rpc('get_shared_business_name').catch(function () { return null; })])
-          .then(function (results) { render(results[0], results[1]); })
+        Promise.all([
+          rpc('get_shared_loan_status'),
+          rpc('get_shared_business_name').catch(function () { return null; }),
+          loadPaymentQrs().catch(function () { return null; })
+        ])
+          .then(function (results) {
+            render(results[0], results[1]);
+            renderPaymentQrs(results[2]);
+          })
           .catch(function (err) {
             var offline = !navigator.onLine || err instanceof TypeError;
             showError(offline
@@ -476,6 +483,39 @@
               : 'This loan-status link is invalid or has been revoked.');
           })
           .then(function () { $('refresh').disabled = false; });
+      }
+
+      function loadPaymentQrs() {
+        return fetch(SUPABASE_URL + '/functions/v1/shared-payment-qrs?token=' + encodeURIComponent(token), {
+          headers: { apikey: SUPABASE_ANON_KEY },
+          cache: 'no-store'
+        }).then(function (response) {
+          if (!response.ok) throw new Error('QR request failed');
+          return response.json();
+        });
+      }
+
+      function renderPaymentQrs(items) {
+        if (!Array.isArray(items) || !items.length) return;
+        var qrs = $('payment-qrs');
+        qrs.replaceChildren();
+        items.forEach(function (item) {
+          if (!item || !item.url || !item.label) return;
+          var figure = document.createElement('figure');
+          figure.className = 'qr';
+          figure.style.margin = '0';
+          var image = document.createElement('img');
+          image.src = item.url;
+          image.alt = item.label + ' payment QR code';
+          image.loading = 'lazy';
+          figure.appendChild(image);
+          figure.appendChild(el('span', 'name', item.label));
+          var save = el('a', 'save', 'Save image');
+          save.href = item.url;
+          save.download = item.label.replace(/[^a-z0-9_-]+/gi, '-') + '-QR';
+          figure.appendChild(save);
+          qrs.appendChild(figure);
+        });
       }
 
       function selectTab(which) {

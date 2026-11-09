@@ -105,6 +105,7 @@ Open: the remaining PDFs, legal review, and turning on the weekly backup task.
 ## Payments and synchronization
 
 - [x] Payment entry for Cash, GCash, AUB, MariBank, and PalPay
+- [x] Paginated payment list with configurable rows per page
 - [x] Pending Verification payment state and live history
 - [x] Rejected payment workflow with required reason and audit event
 - [x] Verified and reversed payment workflows
@@ -143,7 +144,7 @@ Open: the remaining PDFs, legal review, and turning on the weekly backup task.
 - [x] Acknowledgment of money release PDF
 - [x] Business name and contacts on every PDF (was "LENDING MANAGER")
 - [ ] Bulk printing of statements
-- [ ] Edit collection notes and promises after saving
+- [x] Edit and delete collection notes and promises after saving, with audit history
 - [ ] Readable (PDF/CSV) borrower data export
 
 ## Customer read-only access
@@ -159,10 +160,13 @@ Open: the remaining PDFs, legal review, and turning on the weekly backup task.
 - [x] Schedule shows still owed per installment and Overdue / Due today / Upcoming
 - [x] Loan Terms tab: amount, release, flat rate, interest, installments, no penalties (no payoff amount shown, owner's decision)
 - [x] Payment history with receipt numbers, last 4 of the reference, and a printable receipt
+- [x] Enabled organization payment QRs shown on customer links through short-lived signed URLs
 - [x] Business phone and email on the page; spreadsheet import notes never shown
 
 ## Settings and operations
 
+- [x] Top-bar account menu with appearance, updates, password, settings, and sign-out
+- [x] Notification center for pending verification, due/overdue installments, promises, and penalties
 - [x] Theme mode and reusable palette controls
 - [x] Supabase connection status
 - [x] Authenticated sign-out
@@ -170,6 +174,8 @@ Open: the remaining PDFs, legal review, and turning on the weekly backup task.
 - [x] Runtime-configurable business/app name, contact details, and document branding source
 - [x] Configurable rate and payday presets
 - [x] Payment-method configuration
+- [x] Organization payment QR manager: add, rename, preview/zoom, replace,
+  enable/disable, and delete; enabled QRs flow into generated loan PDFs
 - [x] Existing staff role management with last-owner protection
 - [x] Role-constrained staff invitation email and account provisioning workflow
 - [x] Organization JSON backup export and encrypted-storage reminder
@@ -187,12 +193,12 @@ Open: the remaining PDFs, legal review, and turning on the weekly backup task.
 ## Verification evidence
 
 - [x] `fvm flutter analyze` — no issues
-- [x] `fvm flutter test` — 65 tests passing
+- [x] `fvm flutter test` — 77 tests passing
 - [x] Database tests on a local Postgres copy (`tool/backup/*.mjs`): backup/restore 17, per-loan restore 20, late reason and evidence categories 11
 - [x] Real-data restore rehearsal from production backups
 - [x] All 105 icons in use verified to draw from the deployed font
 - [x] Production web release build succeeds
-- [x] Production migration history matches local migrations through `202611090038`
+- [x] Production migration history matches local migrations through `202611090047`
 - [x] Remote Supabase schema lint reports no errors
 - [x] Maricar-style A4 schedule rendered and visually inspected
 - [x] Live production borrower write verified with an archived smoke record

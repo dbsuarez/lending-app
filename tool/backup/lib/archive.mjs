@@ -19,6 +19,7 @@ export const FORMAT = 'lending-manager-backup-v2';
 export const TABLES = [
   'organizations',
   'organization_members',
+  'payment_qr_codes',
   'borrowers',
   'loans',
   'installments',
@@ -36,7 +37,7 @@ export const TABLES = [
 ];
 
 /** Tables added later; backups made before them simply have none. */
-export const OPTIONAL = ['penalty_charges'];
+export const OPTIONAL = ['penalty_charges', 'payment_qr_codes'];
 
 /** Tables the app cannot work without; a backup missing rows here is useless. */
 export const REQUIRED = ['organizations', 'organization_members'];
@@ -252,6 +253,9 @@ export function readArchive(bytes) {
     }
     for (const d of tables.loan_documents) {
       if (!listed.has(d.storage_path)) problems.push(`document without its file: ${d.storage_path}`);
+    }
+    for (const q of tables.payment_qr_codes) {
+      if (!listed.has(q.storage_path)) problems.push(`payment QR without its file: ${q.storage_path}`);
     }
   }
 

@@ -1,0 +1,2 @@
+export 'browser_activity_stub.dart'
+    if (dart.library.js_interop) 'browser_activity_web.dart';

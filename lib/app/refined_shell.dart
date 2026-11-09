@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/config/app_config.dart';
 import '../features/settings/business_profile_provider.dart';
 import 'global_search.dart';
+import 'top_bar_actions.dart';
 import 'theme/app_theme.dart';
 
 const _nav = [
@@ -78,10 +79,8 @@ class _AppShellState extends ConsumerState<AppShell> {
               icon: const Icon(Icons.refresh),
             ),
           const GlobalSearch(compact: true),
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(Icons.notifications_none),
-          ),
+          const NotificationButton(),
+          AccountButton(initials: _userInitials, label: _userLabel, role: _roleLabel, compact: true),
         ],
       ),
       body: SafeArea(child: widget.child),
@@ -377,40 +376,8 @@ class _AppShellState extends ConsumerState<AppShell> {
           ),
         ),
         const SizedBox(width: 14),
-        IconButton(
-          onPressed: () {},
-          icon: const Icon(Icons.notifications_none),
-        ),
-        CircleAvatar(
-          radius: 18,
-          backgroundColor: Theme.of(context).colorScheme.primary,
-          child: Text(
-            _userInitials,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              _userLabel,
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-            ),
-            Text(
-              _roleLabel,
-              style: TextStyle(
-                fontSize: 10,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
+        const NotificationButton(),
+        AccountButton(initials: _userInitials, label: _userLabel, role: _roleLabel),
       ],
     ),
   );

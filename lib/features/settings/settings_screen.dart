@@ -83,6 +83,18 @@ class SettingsScreen extends ConsumerWidget {
             ),
             const Divider(height: 1),
             ListTile(
+              leading: const Icon(Icons.qr_code_2),
+              title: const Text('Payment QR codes'),
+              subtitle: const Text(
+                'Manage bank and wallet QRs shown on borrower documents',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: AppConfig.hasSupabase
+                  ? () => context.go('/settings/payment-qrs')
+                  : null,
+            ),
+            const Divider(height: 1),
+            ListTile(
               leading: const Icon(Icons.history),
               title: const Text('Audit history'),
               subtitle: const Text('Review important financial record events'),

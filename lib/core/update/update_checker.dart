@@ -7,7 +7,16 @@ import 'package:http/http.dart' as http;
 
 import '../config/app_config.dart';
 import '../undo/undo_controller.dart';
+import 'browser_activity.dart';
 import 'page_reload.dart';
+
+bool isNewerBuild(String latest, String current) {
+  final buildPattern = RegExp(r'^\d{8}_\d{4}$');
+  if (buildPattern.hasMatch(latest) && buildPattern.hasMatch(current)) {
+    return latest.compareTo(current) > 0;
+  }
+  return latest.isNotEmpty && latest != current;
+}
 
 /// Web only: notices when a newer version has been published and offers to
 /// update. The build writes app_build.json (never cached) next to the app;
@@ -25,8 +34,9 @@ class UpdateChecker extends StatefulWidget {
 
 class _UpdateCheckerState extends State<UpdateChecker>
     with WidgetsBindingObserver {
-  static const _every = Duration(minutes: 5);
+  static const _every = Duration(minutes: 1);
   Timer? _timer;
+  BrowserActivityListener? _browserActivity;
   bool _shown = false;
   DateTime? _snoozedUntil;
 
@@ -35,6 +45,7 @@ class _UpdateCheckerState extends State<UpdateChecker>
     super.initState();
     if (!UpdateChecker.enabled) return;
     WidgetsBinding.instance.addObserver(this);
+    _browserActivity = BrowserActivityListener(_check);
     _timer = Timer.periodic(_every, (_) => _check());
     // First check 10 seconds after the page loads, then every 5 minutes.
     Future<void>.delayed(const Duration(seconds: 10), _check);
@@ -43,6 +54,7 @@ class _UpdateCheckerState extends State<UpdateChecker>
   @override
   void dispose() {
     _timer?.cancel();
+    _browserActivity?.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -66,9 +78,7 @@ class _UpdateCheckerState extends State<UpdateChecker>
       if (response.statusCode != 200) return;
       final latest =
           (jsonDecode(response.body) as Map<String, dynamic>)['build_id'];
-      if (latest is String &&
-          latest.isNotEmpty &&
-          latest != AppConfig.buildId) {
+      if (latest is String && isNewerBuild(latest, AppConfig.buildId)) {
         _show(latest);
       }
     } catch (_) {

@@ -85,6 +85,9 @@ export async function exportOrganization(client, userId, { includeFiles = true, 
     for (const d of tables.loan_documents) {
       files.push({ bucket: 'loan-evidence', path: d.storage_path, bytes: await client.file('loan-evidence', d.storage_path) });
     }
+    for (const q of tables.payment_qr_codes) {
+      files.push({ bucket: 'payment-qrs', path: q.storage_path, bytes: await client.file('payment-qrs', q.storage_path) });
+    }
     onProgress(`files: ${files.length}`);
   }
   const org = tables.organizations[0];

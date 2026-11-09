@@ -9,6 +9,11 @@
 # credential key or value appears anywhere under build/web.
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path $PSScriptRoot -Parent)
+$sdkLink = Get-Item '.fvm\flutter_sdk' -ErrorAction Stop
+$sdk = if ($sdkLink.Target) { $sdkLink.Target[0] } else { $sdkLink.FullName }
+$dart = Join-Path $sdk 'bin\cache\dart-sdk\bin\dart.exe'
+$flutterPackages = Join-Path $sdk 'packages\flutter_tools\.dart_tool\package_config.json'
+$flutterSnapshot = Join-Path $sdk 'bin\cache\flutter_tools.snapshot'
 
 $envMap = @{}
 Get-Content .env | ForEach-Object {
@@ -29,12 +34,12 @@ $ErrorActionPreference = 'Continue'
 # --pwa-strategy=none: no offline cache, so a deploy shows on the next reload
 # (the default cache kept serving the previous version until a 2nd reload).
 # Icon tree-shaking corrupts some glyphs (blank icons); ship the full font.
-fvm flutter build web --release --pwa-strategy=none --no-tree-shake-icons `
+& $dart "--packages=$flutterPackages" $flutterSnapshot build web --release --pwa-strategy=none --no-tree-shake-icons `
   "--dart-define=SUPABASE_URL=$($envMap.SUPABASE_URL)" `
   "--dart-define=SUPABASE_ANON_KEY=$($envMap.SUPABASE_ANON_KEY)" `
   "--dart-define=APP_ENV=production" `
   "--dart-define=PUBLIC_APP_URL=https://lending-manager-ph.web.app" `
-  "--dart-define=BUILD_ID=$buildId" 2>&1 | ForEach-Object { "$_" } | Select-Object -Last 3
+  "--dart-define=BUILD_ID=$buildId" 2>&1 | ForEach-Object { "$_" }
 if ($LASTEXITCODE -ne 0) { throw "flutter build failed ($LASTEXITCODE)" }
 $ErrorActionPreference = 'Stop'
 

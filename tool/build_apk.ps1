@@ -9,6 +9,11 @@
 param([switch]$Install)
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path $PSScriptRoot -Parent)
+$sdkLink = Get-Item '.fvm\flutter_sdk' -ErrorAction Stop
+$sdk = if ($sdkLink.Target) { $sdkLink.Target[0] } else { $sdkLink.FullName }
+$dart = Join-Path $sdk 'bin\cache\dart-sdk\bin\dart.exe'
+$flutterPackages = Join-Path $sdk 'packages\flutter_tools\.dart_tool\package_config.json'
+$flutterSnapshot = Join-Path $sdk 'bin\cache\flutter_tools.snapshot'
 
 $envMap = @{}
 Get-Content .env | ForEach-Object {
@@ -25,12 +30,12 @@ $buildId = [TimeZoneInfo]::ConvertTimeFromUtc([DateTime]::UtcNow, $tz).ToString(
 
 $ErrorActionPreference = 'Continue'
 # Icon tree-shaking corrupts some glyphs (blank icons); ship the full font.
-fvm flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons `
+& $dart "--packages=$flutterPackages" $flutterSnapshot build apk --release --target-platform android-arm64 --no-tree-shake-icons `
   "--dart-define=SUPABASE_URL=$($envMap.SUPABASE_URL)" `
   "--dart-define=SUPABASE_ANON_KEY=$($envMap.SUPABASE_ANON_KEY)" `
   "--dart-define=APP_ENV=production" `
   "--dart-define=PUBLIC_APP_URL=https://lending-manager-ph.web.app" `
-  "--dart-define=BUILD_ID=$buildId" 2>&1 | ForEach-Object { "$_" } | Select-Object -Last 2
+  "--dart-define=BUILD_ID=$buildId" 2>&1 | ForEach-Object { "$_" }
 if ($LASTEXITCODE -ne 0) { throw "flutter build apk failed ($LASTEXITCODE)" }
 $ErrorActionPreference = 'Stop'
 

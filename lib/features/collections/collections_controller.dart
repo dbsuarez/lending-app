@@ -6,6 +6,7 @@ import '../../domain/models/models.dart';
 import '../sync/offline_sync_controller.dart';
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
+import '../../app/top_bar_actions.dart';
 
 final collectionsControllerProvider =
     AsyncNotifierProvider<CollectionsController, List<CollectionActivity>>(
@@ -78,6 +79,7 @@ class CollectionsController extends AsyncNotifier<List<CollectionActivity>> {
           clientOperationId: operationId,
         );
         state = AsyncData(await _repository!.fetchActivities());
+        ref.invalidate(appNoticesProvider);
       } else {
         lastRecordedId = DateTime.now().microsecondsSinceEpoch.toString();
         _local.insert(
@@ -132,6 +134,7 @@ class CollectionsController extends AsyncNotifier<List<CollectionActivity>> {
       if (isLive) {
         await _repository!.undo(activityId);
         state = AsyncData(await _repository!.fetchActivities());
+        ref.invalidate(appNoticesProvider);
         return true;
       }
       await _initialBuild();
@@ -142,6 +145,26 @@ class CollectionsController extends AsyncNotifier<List<CollectionActivity>> {
     } catch (_) {
       return false;
     }
+  }
+
+  Future<bool> updateActivity(CollectionActivity activity, {required String type, required String outcome, required String notes, DateTime? promisedOn, int? promisedAmountCentavos}) async {
+    if (!isLive) return false;
+    try {
+      await _repository!.update(activityId: activity.id, type: type, outcome: outcome, notes: notes, promisedOn: promisedOn, promisedAmountCentavos: promisedAmountCentavos);
+      state = AsyncData(await _repository!.fetchActivities());
+      ref.invalidate(appNoticesProvider);
+      return true;
+    } catch (_) { return false; }
+  }
+
+  Future<bool> deleteActivity(String activityId) async {
+    if (!isLive) return false;
+    try {
+      await _repository!.delete(activityId);
+      state = AsyncData(await _repository!.fetchActivities());
+      ref.invalidate(appNoticesProvider);
+      return true;
+    } catch (_) { return false; }
   }
 
   String _date(DateTime value) =>

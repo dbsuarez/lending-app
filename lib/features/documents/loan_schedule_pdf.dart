@@ -6,6 +6,7 @@ import '../../core/formatting.dart';
 import '../../domain/models/models.dart';
 import '../penalties/penalty_widgets.dart' show describePenalty;
 import '../settings/business_profile_provider.dart';
+import '../settings/payment_qr_provider.dart';
 
 part 'loan_documents_pdf.dart';
 
@@ -202,22 +203,9 @@ class LoanSchedulePdf {
   }
 
   /// InstaPay QR codes printed on borrower documents (schedule and ledger).
-  static const _qrAssets = [
-    ('GCash', 'assets/payment_qr/gcash.png'),
-    ('AUB HelloMoney', 'assets/payment_qr/aub.png'),
-    ('MariBank', 'assets/payment_qr/maribank.png'),
-  ];
-  static List<(String, pw.ImageProvider)>? _cachedQrs;
-
   static Future<List<(String, pw.ImageProvider)>> _paymentQrs() async {
-    final cached = _cachedQrs;
-    if (cached != null) return cached;
-    final loaded = <(String, pw.ImageProvider)>[];
-    for (final (label, path) in _qrAssets) {
-      final data = await rootBundle.load(path);
-      loaded.add((label, pw.MemoryImage(data.buffer.asUint8List())));
-    }
-    return _cachedQrs = loaded;
+    final loaded = await loadEnabledPaymentQrs();
+    return [for (final item in loaded) (item.$1, pw.MemoryImage(item.$2))];
   }
 
   /// One block (title, instructions, QR row) so it moves to the next page
@@ -256,12 +244,13 @@ class LoanSchedulePdf {
                 ),
               ),
               pw.SizedBox(height: 8),
-              pw.Row(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
+              pw.Wrap(
+                spacing: 10,
+                runSpacing: 10,
                 children: [
-                  for (var i = 0; i < qrs.length; i++) ...[
-                    if (i > 0) pw.SizedBox(width: 10),
-                    pw.Expanded(
+                  for (var i = 0; i < qrs.length; i++)
+                    pw.SizedBox(
+                      width: 155,
                       child: pw.Container(
                         padding: const pw.EdgeInsets.all(6),
                         decoration: pw.BoxDecoration(
@@ -289,7 +278,6 @@ class LoanSchedulePdf {
                         ),
                       ),
                     ),
-                  ],
                 ],
               ),
             ],

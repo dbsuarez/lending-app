@@ -18,6 +18,7 @@ import '../features/documents/documents_screen.dart';
 import '../features/collections/collections_screen.dart';
 import '../features/settings/settings_screen.dart';
 import '../features/settings/audit_events_screen.dart';
+import '../features/settings/payment_qr_screen.dart';
 import 'refined_shell.dart';
 import '../core/undo/undo_controller.dart';
 import '../core/security/app_lock.dart';
@@ -87,6 +88,10 @@ final _router = GoRouter(
         GoRoute(
           path: '/settings/audit',
           builder: (c, s) => const AuditEventsScreen(),
+        ),
+        GoRoute(
+          path: '/settings/payment-qrs',
+          builder: (c, s) => const PaymentQrScreen(),
         ),
         GoRoute(path: '/settings', builder: (c, s) => const SettingsScreen()),
       ],

@@ -19,6 +19,7 @@ const backupFormat = 'lending-manager-backup-v2';
 const backupTables = [
   'organizations',
   'organization_members',
+  'payment_qr_codes',
   'borrowers',
   'loans',
   'installments',
@@ -36,9 +37,10 @@ const backupTables = [
 ];
 
 const _evidenceBucket = 'loan-evidence';
+const _paymentQrBucket = 'payment-qrs';
 
 /// Tables added later; backups made before them simply have none.
-const _optionalTables = {'penalty_charges'};
+const _optionalTables = {'penalty_charges', 'payment_qr_codes'};
 
 List<String> _pkOf(String table) => table == 'organization_members'
     ? const ['organization_id', 'user_id']
@@ -339,6 +341,11 @@ BackupCheck readBackup(Uint8List bytes) {
         problems.add('document without its file: ${d['storage_path']}');
       }
     }
+    for (final q in tables['payment_qr_codes']!) {
+      if (!listed.contains(q['storage_path'])) {
+        problems.add('payment QR without its file: ${q['storage_path']}');
+      }
+    }
   }
   return BackupCheck(
     problems: problems,
@@ -434,6 +441,18 @@ Future<BackupData> fetchBackupData(
           _evidenceBucket,
           path,
           await client.storage.from(_evidenceBucket).download(path),
+        ),
+      );
+    }
+    final qrs = tables['payment_qr_codes']!;
+    for (var i = 0; i < qrs.length; i++) {
+      onProgress?.call('Downloading QR codes ${i + 1} of ${qrs.length}…');
+      final path = qrs[i]['storage_path'] as String;
+      files.add(
+        BackupFile(
+          _paymentQrBucket,
+          path,
+          await client.storage.from(_paymentQrBucket).download(path),
         ),
       );
     }

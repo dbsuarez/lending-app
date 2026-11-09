@@ -61,6 +61,16 @@ class SupabaseCollectionsRepository {
     params: {'p_activity_id': activityId},
   );
 
+  Future<void> update({required String activityId, required String type, required String outcome, required String notes, DateTime? promisedOn, int? promisedAmountCentavos}) => _client.rpc('update_collection_activity', params: {
+    'p_activity_id': activityId, 'p_activity_type': type, 'p_outcome': outcome,
+    'p_notes': notes, 'p_promised_on': promisedOn == null ? null : _date(promisedOn),
+    'p_promised_amount_centavos': promisedAmountCentavos,
+  });
+
+  Future<void> delete(String activityId) => _client.rpc(
+    'delete_collection_activity', params: {'p_activity_id': activityId},
+  );
+
   String _borrowerName(Map<String, dynamic> row) {
     final loan = row['loan'] as Map<String, dynamic>;
     final borrower = loan['borrower'] as Map<String, dynamic>;
