@@ -81,8 +81,8 @@ Future<void> printLoanDocument(
       business: business,
       borrower: borrower,
       releasedOn: terms!.disbursedOn!,
-      method: terms.method ?? '',
-      reference: terms.reference ?? '',
+      method: borrowerFacing(terms.method),
+      reference: borrowerFacing(terms.reference),
     ),
   };
   await Printing.layoutPdf(

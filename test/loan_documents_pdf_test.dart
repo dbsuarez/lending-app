@@ -81,15 +81,23 @@ void main() {
 
   test('amounts in words', () {
     expect(amountInWords(100), 'One peso only');
-    expect(amountInWords(125050), 'One thousand two hundred fifty pesos and 50/100');
     expect(
-      amountInWords(1000000),
-      'Ten thousand pesos only',
+      amountInWords(125050),
+      'One thousand two hundred fifty pesos and 50/100',
     );
+    expect(amountInWords(1000000), 'Ten thousand pesos only');
     expect(
       amountInWords(191666),
       'One thousand nine hundred sixteen pesos and 66/100',
     );
+  });
+
+  test('spreadsheet import notes stay off borrower documents', () {
+    expect(borrowerFacing('Imported from IT Avenue.xlsx / Mhaya'), '');
+    expect(borrowerFacing('Legacy import'), '');
+    expect(borrowerFacing('GCash'), 'GCash');
+    expect(borrowerFacing('1234 5678'), '1234 5678');
+    expect(borrowerFacing(null), '');
   });
 
   test('every document builds', () async {
@@ -124,7 +132,9 @@ void main() {
     };
     for (final entry in docs.entries) {
       expect(entry.value.length, greaterThan(1000), reason: entry.key);
-      if (out != null) File('$out/${entry.key}.pdf').writeAsBytesSync(entry.value);
+      if (out != null) {
+        File('$out/${entry.key}.pdf').writeAsBytesSync(entry.value);
+      }
     }
   });
 }

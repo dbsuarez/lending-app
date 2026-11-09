@@ -95,9 +95,10 @@ class LoanDocumentsPdf {
             _rows([
               ('For loan', LoanSchedulePdf._reference(loan.summary.id)),
               ('Date received', formatPhilippineDateTime(received)),
-              ('Payment method', payment.method),
-              if (payment.reference.isNotEmpty)
-                ('Transaction reference', payment.reference),
+              if (borrowerFacing(payment.method).isNotEmpty)
+                ('Payment method', borrowerFacing(payment.method)),
+              if (borrowerFacing(payment.reference).isNotEmpty)
+                ('Transaction reference', borrowerFacing(payment.reference)),
               if (match != null && match.allocations.isNotEmpty)
                 (
                   'Applied to',
@@ -791,6 +792,23 @@ class LoanDocumentsPdf {
       ],
     ],
   );
+}
+
+/// Loans and payments brought in from the old spreadsheet carry internal
+/// notes such as "Imported from IT Avenue.xlsx / Mhaya" or "Legacy import"
+/// as their method or reference. Those never go on borrower documents.
+String borrowerFacing(String? value) {
+  final v = (value ?? '').trim();
+  final lower = v.toLowerCase();
+  if (lower.contains('.xlsx') ||
+      lower.contains('.xls') ||
+      lower.contains('.csv') ||
+      lower.startsWith('imported from') ||
+      lower == 'legacy import' ||
+      lower.contains('historical import')) {
+    return '';
+  }
+  return v;
 }
 
 /// "One thousand two hundred fifty pesos and 50/100", for amounts on
