@@ -346,11 +346,10 @@
         line('Total to repay', money(loan.total_centavos));
         if (t.installment_count) line('Installments', String(t.installment_count));
         line('Penalties or late charges', 'None');
-        if (loan.payoff_today_centavos != null && loan.loan_status === 'active') line('To pay everything off today', money(loan.payoff_today_centavos));
         box.appendChild(dl);
         box.appendChild(el('p', null,
-          'Payments go to the oldest unpaid installment first. You may pay everything early: interest on installments not yet due is waived. ' +
-          'Ask us before paying off early so we can confirm the exact amount.'));
+          'Payments go to the oldest unpaid installment first. ' +
+          'If you would like to pay off your loan early, contact us for the amount.'));
       }
 
       function showReceipt(item) {

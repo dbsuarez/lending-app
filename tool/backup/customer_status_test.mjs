@@ -41,7 +41,7 @@ const st = Object.fromEntries(s.schedule.map((i) => [i.sequence, i.status]));
 ok('schedule states', st[1] === 'paid' && st[2] === 'overdue' && st[3] === 'upcoming' && st[4] === 'upcoming', JSON.stringify(st));
 ok('still owed per installment', Number(s.schedule[1].outstanding_centavos) === 187500);
 // Payoff today: unpaid principal (10000 - 2500 - paid principal of inst2) + interest due (none left on inst1; inst2 interest paid first).
-ok('payoff today is less than the full balance', Number(s.payoff_today_centavos) > 0 && Number(s.payoff_today_centavos) < Number(s.outstanding_centavos), s.payoff_today_centavos);
+ok('no payoff amount is given to the borrower', !('payoff_today_centavos' in s) && !JSON.stringify(s).includes('early_payoff'));
 const gcash = s.payments.find((p) => p.amount_centavos === 287500);
 ok('receipt number and last 4 of the reference only', gcash.receipt_no === 'PR-' + p1.slice(0, 8).toUpperCase() && gcash.reference_last4 === '9012');
 ok('applied installments on verified payments', gcash.applied.length >= 1 && gcash.applied[0].sequence === 1);
