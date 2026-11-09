@@ -16,3 +16,11 @@ void refreshMoneyViews(Ref ref, {bool loans = true, bool payments = true}) {
   ref.invalidate(liveDashboardProvider);
   ref.invalidate(agingReportProvider);
 }
+
+/// The same, from outside a provider (e.g. after a restore in Settings).
+void refreshAllMoneyViews(ProviderContainer container) {
+  container.invalidate(loansControllerProvider);
+  container.invalidate(paymentsControllerProvider);
+  container.invalidate(liveDashboardProvider);
+  container.invalidate(agingReportProvider);
+}

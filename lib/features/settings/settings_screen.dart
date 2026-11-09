@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'backup_dialogs.dart';
+import 'loan_restore.dart';
 import '../../core/undo/undo_controller.dart';
 import '../../core/security/app_lock.dart';
 import '../../core/config/app_config.dart';
@@ -43,6 +44,18 @@ class SettingsScreen extends ConsumerWidget {
               ),
               trailing: const Icon(Icons.fact_check_outlined),
               onTap: AppConfig.hasSupabase ? () => checkBackup(context) : null,
+            ),
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.settings_backup_restore),
+              title: const Text('Restore a loan from a backup'),
+              subtitle: const Text(
+                'Put one loan back as it was in a backup (owner)',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: AppConfig.hasSupabase
+                  ? () => restoreLoanFromBackup(context)
+                  : null,
             ),
             const Divider(height: 1),
             ListTile(

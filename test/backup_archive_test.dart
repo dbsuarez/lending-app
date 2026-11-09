@@ -132,6 +132,37 @@ void main() {
     expect(readBackup(Uint8List.fromList([1, 2, 3])).ok, isFalse);
   });
 
+  test('one loan\'s state from a backup has exactly its own records', () {
+    final tables = sample().tables;
+    final state = loanStateFromBackup(tables, 'l1')!;
+    expect((state['loan'] as Map)['id'], 'l1');
+    expect((state['installments'] as List).length, 3);
+    expect((state['payments'] as List).length, 2);
+    expect((state['payment_allocations'] as List).length, 2);
+    expect(state.keys.toSet(), {
+      'loan',
+      ...loanStateTables.where((t) => t != 'loans'),
+    });
+    expect(loanStateFromBackup(tables, 'missing'), isNull);
+  });
+
+  test('canonical JSON ignores key order', () {
+    expect(
+      canonicalJson({
+        'b': 1,
+        'a': [
+          {'y': 2, 'x': 1},
+        ],
+      }),
+      canonicalJson({
+        'a': [
+          {'x': 1, 'y': 2},
+        ],
+        'b': 1,
+      }),
+    );
+  });
+
   test('uploaded files are included and verified', () {
     final file = BackupFile(
       'loan-evidence',

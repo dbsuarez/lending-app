@@ -455,3 +455,69 @@ Future<Map<String, LoanBalance>> fetchLiveBalances(
       t: await _fetchAll(client, t, orgId),
   });
 }
+
+// ---- Per-loan restore -----------------------------------------------------
+
+/// Tables that make up one loan's state (see restore_loan in the database).
+const loanStateTables = [
+  'loans',
+  'installments',
+  'loan_disbursements',
+  'payments',
+  'payment_allocations',
+  'payment_corrections',
+  'loan_amendments',
+  'collection_activities',
+  'loan_share_links',
+];
+
+/// One loan's records in the shape restore_loan expects; null when the loan
+/// is not in [tables]. Mirrors loanStateFromTables in tool/backup.
+Map<String, dynamic>? loanStateFromBackup(
+  Map<String, Rows> tables,
+  String loanId,
+) {
+  final loan = tables['loans']!.where((l) => l['id'] == loanId).firstOrNull;
+  if (loan == null) return null;
+  Rows byLoan(String t) =>
+      tables[t]!.where((r) => r['loan_id'] == loanId).toList();
+  final payments = byLoan('payments');
+  final paymentIds = payments.map((p) => p['id']).toSet();
+  return {
+    'loan': loan,
+    'installments': byLoan('installments'),
+    'loan_disbursements': byLoan('loan_disbursements'),
+    'payments': payments,
+    'payment_allocations': tables['payment_allocations']!
+        .where((a) => paymentIds.contains(a['payment_id']))
+        .toList(),
+    'payment_corrections': tables['payment_corrections']!
+        .where((c) => paymentIds.contains(c['payment_id']))
+        .toList(),
+    'loan_amendments': byLoan('loan_amendments'),
+    'collection_activities': byLoan('collection_activities'),
+    'loan_share_links': byLoan('loan_share_links'),
+  };
+}
+
+/// A stable text form of any JSON value (map keys sorted), for comparing.
+String canonicalJson(Object? value) {
+  Object? sort(Object? v) => switch (v) {
+    Map() => {
+      for (final k in (v.keys.map((k) => '$k').toList()..sort())) k: sort(v[k]),
+    },
+    List() => [for (final x in v) sort(x)],
+    _ => v,
+  };
+  return jsonEncode(sort(value));
+}
+
+/// The live rows of the loan-state tables (and borrowers, for names), for
+/// comparing with a backup.
+Future<Map<String, Rows>> fetchLiveLoanTables(SupabaseClient client) async {
+  final orgId = await _ownerOrganization(client);
+  return {
+    for (final t in [...loanStateTables, 'borrowers'])
+      t: await _fetchAll(client, t, orgId),
+  };
+}

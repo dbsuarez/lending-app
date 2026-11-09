@@ -251,6 +251,30 @@ export function readArchive(bytes) {
   return { ok: problems.length === 0, problems, manifest, tables, files, balances: recomputed };
 }
 
+/**
+ * One loan's records from a backup, in the shape restore_loan expects
+ * (null when the loan is not in the backup). Mirrors loanStateFromBackup in
+ * lib/features/settings/backup_archive.dart.
+ */
+export function loanStateFromTables(tables, loanId) {
+  const loan = tables.loans.find((l) => l.id === loanId);
+  if (!loan) return null;
+  const byLoan = (t) => tables[t].filter((r) => r.loan_id === loanId);
+  const payments = byLoan('payments');
+  const paymentIds = new Set(payments.map((p) => p.id));
+  return {
+    loan,
+    installments: byLoan('installments'),
+    loan_disbursements: byLoan('loan_disbursements'),
+    payments,
+    payment_allocations: tables.payment_allocations.filter((a) => paymentIds.has(a.payment_id)),
+    payment_corrections: tables.payment_corrections.filter((c) => paymentIds.has(c.payment_id)),
+    loan_amendments: byLoan('loan_amendments'),
+    collection_activities: byLoan('collection_activities'),
+    loan_share_links: byLoan('loan_share_links'),
+  };
+}
+
 /** Replaces user ids everywhere (e.g. old owner id -> new account in a new project). */
 export function remapUsers(tables, map) {
   if (!map || !Object.keys(map).length) return tables;
