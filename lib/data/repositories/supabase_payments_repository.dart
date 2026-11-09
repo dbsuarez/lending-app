@@ -25,7 +25,7 @@ class SupabasePaymentsRepository {
     final rows = await _client
         .from('payments')
         .select(
-          'id, loan_id, amount_centavos, received_at, method, reference, status, unapplied_centavos, late_reason, loan:loans(borrower:borrowers(first_name,last_name))',
+          'id, loan_id, amount_centavos, received_at, method, reference, status, unapplied_centavos, unapplied_settled_centavos, late_reason, loan:loans(borrower:borrowers(first_name,last_name))',
         )
         .eq('organization_id', await organizationId())
         .order('received_at', ascending: false);
@@ -126,7 +126,9 @@ class SupabasePaymentsRepository {
       method: row['method'] as String,
       reference: row['reference'] as String? ?? '',
       status: row['status'] as String,
-      unappliedCentavos: row['unapplied_centavos'] as int? ?? 0,
+      unappliedCentavos:
+          (row['unapplied_centavos'] as int? ?? 0) -
+          (row['unapplied_settled_centavos'] as int? ?? 0),
       lateReason: row['late_reason'] as String?,
     );
   }

@@ -6,7 +6,7 @@ const _loanColumns =
     'monthly_rate_basis_points, term_months, status, is_personal, created_at, '
     'borrower:borrowers(first_name,last_name), '
     'disbursement:loan_disbursements(disbursed_on,voided_at), '
-    'payments(id,status,received_at,amount_centavos)';
+    'payments(id,status,received_at,amount_centavos,unapplied_centavos,unapplied_settled_centavos,unapplied_settlement)';
 
 class SupabaseLoansRepository {
   SupabaseLoansRepository(this._client);
@@ -146,6 +146,12 @@ class SupabaseLoansRepository {
             ReceivedPayment(
               amountCentavos: payment['amount_centavos'] as int,
               receivedAt: DateTime.parse(payment['received_at'] as String),
+              id: payment['id'] as String,
+              unappliedCentavos:
+                  (payment['unapplied_centavos'] as int? ?? 0) -
+                  (payment['unapplied_settled_centavos'] as int? ?? 0),
+              settlement: (payment['unapplied_settlement'] as Map?)
+                  ?.cast<String, dynamic>(),
               appliedSequence: _largestShare(
                 appliedByPayment[payment['id'] as String],
               ),
@@ -405,6 +411,32 @@ class SupabaseLoansRepository {
     );
   }
 
+  // Overpayments (see migration 202611090044_overpayment_settlement.sql).
+
+  Future<void> settleOverpayment({
+    required String paymentId,
+    required String kind,
+    required DateTime settledOn,
+    String? method,
+    String? reference,
+    String? reason,
+  }) => _client.rpc(
+    'settle_overpayment',
+    params: {
+      'p_payment_id': paymentId,
+      'p_kind': kind,
+      'p_settled_on': _date(settledOn),
+      'p_method': method,
+      'p_reference': reference,
+      'p_reason': reason,
+    },
+  );
+
+  Future<void> undoOverpaymentSettlement(String paymentId) => _client.rpc(
+    'undo_overpayment_settlement',
+    params: {'p_payment_id': paymentId},
+  );
+
   // Penalties (see migration 202611090043_penalties.sql).
 
   /// Charges every automatic penalty due up to today. Returns how many.
@@ -578,7 +610,7 @@ class SupabaseLoansRepository {
     final rows = await _client
         .from('payments')
         .select(
-          'id, amount_centavos, received_at, method, reference, status, late_reason',
+          'id, amount_centavos, received_at, method, reference, status, late_reason, unapplied_centavos, unapplied_settled_centavos',
         )
         .eq('organization_id', await organizationId())
         .eq('loan_id', loanId)
@@ -595,6 +627,9 @@ class SupabaseLoansRepository {
           reference: row['reference'] as String? ?? '',
           status: row['status'] as String,
           lateReason: row['late_reason'] as String?,
+          unappliedCentavos:
+              (row['unapplied_centavos'] as int? ?? 0) -
+              (row['unapplied_settled_centavos'] as int? ?? 0),
         ),
     ];
   }

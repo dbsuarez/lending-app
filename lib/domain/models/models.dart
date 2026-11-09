@@ -192,7 +192,19 @@ class ReceivedPayment {
     required this.receivedAt,
     this.appliedSequence,
     this.allocations = const [],
+    this.unappliedCentavos = 0,
+    this.id,
+    this.settlement,
   });
+
+  final String? id;
+
+  /// Overpaid money from this payment still open (not refunded or kept).
+  final int unappliedCentavos;
+
+  /// How an overpayment was settled: kind (refunded/kept), amount_centavos,
+  /// settled_on, method, reference, reason. Null when not settled.
+  final Map<String, dynamic>? settlement;
 
   /// How this payment was split across installments, in sequence order.
   final List<AllocationShare> allocations;
@@ -259,6 +271,10 @@ class LoanDetail {
 
   int get paidCentavos =>
       installments.fold(0, (sum, item) => sum + item.paidCentavos);
+
+  /// Received but not credited to any installment: the borrower overpaid.
+  int get overpaidCentavos =>
+      payments.fold(0, (sum, p) => sum + p.unappliedCentavos);
   int get outstandingCentavos =>
       (summary.totalCentavos - paidCentavos).clamp(0, summary.totalCentavos);
 

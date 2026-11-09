@@ -203,10 +203,20 @@ class ReportsScreen extends ConsumerWidget {
                         subtitle: Text(
                           '${payment.reference.isEmpty ? 'No reference' : payment.reference} · Reverse with a required reason if this credit was entered incorrectly.',
                         ),
-                        trailing: Text(
-                          formatPeso(payment.unappliedCentavos),
-                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              formatPeso(payment.unappliedCentavos),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const Icon(Icons.chevron_right),
+                          ],
                         ),
+                        onTap: () =>
+                            context.go('/loans/${payment.loanId}?from=loans'),
                       ),
                   ],
                 ),

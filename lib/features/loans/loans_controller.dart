@@ -36,6 +36,38 @@ class LoansController extends AsyncNotifier<List<LoanSummary>> {
     return _repository!.fetchLoans();
   }
 
+  // ---- Overpayments ----
+
+  /// Throws (with the server's message) when refused.
+  Future<void> settleOverpayment({
+    required String paymentId,
+    required String kind,
+    required DateTime settledOn,
+    String? method,
+    String? reference,
+    String? reason,
+  }) async {
+    await _repository!.settleOverpayment(
+      paymentId: paymentId,
+      kind: kind,
+      settledOn: settledOn,
+      method: method,
+      reference: reference,
+      reason: reason,
+    );
+    await _reloadAll();
+  }
+
+  Future<bool> undoOverpaymentSettlement(String paymentId) async {
+    try {
+      await _repository!.undoOverpaymentSettlement(paymentId);
+      await _reloadAll();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   // ---- Penalties ----
 
   Future<List<PenaltyCharge>> fetchPenaltyCharges(String loanId) async =>

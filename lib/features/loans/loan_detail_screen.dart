@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'overpayment_settle.dart';
 import '../../core/widgets/confirm_action.dart';
 import '../../core/widgets/menu_label.dart';
 import '../penalties/penalty_widgets.dart';
@@ -1154,6 +1155,66 @@ class _Overview extends StatelessWidget {
           subtitle: Text(financialStateText(loan)),
         ),
       ),
+      if (loan.overpaidCentavos > 0) ...[
+        const SizedBox(height: 12),
+        Card(
+          color: Theme.of(context).colorScheme.tertiaryContainer,
+          child: ListTile(
+            leading: Icon(
+              Icons.warning_amber_rounded,
+              color: Theme.of(context).colorScheme.onTertiaryContainer,
+            ),
+            title: Text(
+              'Overpaid ${formatPeso(loan.overpaidCentavos)}',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: Theme.of(context).colorScheme.onTertiaryContainer,
+              ),
+            ),
+            subtitle: Text(
+              'The borrower paid ${formatPeso(loan.overpaidCentavos)} more '
+              'than the loan needed'
+              '${_overpaidOn(loan)}. It is kept as credit and has not been '
+              'refunded. Settle it when you refund it or decide to keep it. '
+              'If an amount was typed wrong, reverse that payment in the '
+              'Payments tab and record the right amount instead.',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onTertiaryContainer,
+              ),
+            ),
+            trailing: FilledButton.tonal(
+              onPressed: () => settleOverpayments(context, loan, onChanged),
+              child: const Text('Settle…'),
+            ),
+          ),
+        ),
+      ],
+      for (final p in loan.payments)
+        if (p.settlement != null) ...[
+          const SizedBox(height: 12),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.check_circle_outline),
+              title: Text(
+                'Overpayment of ${formatPeso((p.settlement!['amount_centavos'] as num?)?.toInt() ?? 0)} '
+                '${p.settlement!['kind'] == 'refunded' ? 'refunded' : 'kept'}',
+              ),
+              subtitle: Text(
+                [
+                  'From the payment of ${formatPhilippineDate(p.receivedOn)}',
+                  if (p.settlement!['settled_on'] != null)
+                    'on ${p.settlement!['settled_on']}',
+                  if (p.settlement!['method'] != null)
+                    'via ${p.settlement!['method']}',
+                  if (p.settlement!['reference'] != null)
+                    'ref ${p.settlement!['reference']}',
+                  if (p.settlement!['reason'] != null)
+                    '${p.settlement!['reason']}',
+                ].join(' · '),
+              ),
+            ),
+          ),
+        ],
       if (loan.summary.status != 'cancelled') ...[
         const SizedBox(height: 12),
         LoanPenaltiesCard(loan: loan, onChanged: onChanged),
@@ -1169,6 +1230,16 @@ class _Overview extends StatelessWidget {
     'refinanced' => Icons.autorenew,
     _ => Icons.info_outline,
   };
+}
+
+String _overpaidOn(LoanDetail loan) {
+  final dates = [
+    for (final p in loan.payments)
+      if (p.unappliedCentavos > 0)
+        '${formatPeso(p.unappliedCentavos)} in the payment of '
+            '${formatPhilippineDate(p.receivedOn)}',
+  ];
+  return dates.isEmpty ? '' : ' (${dates.join('; ')})';
 }
 
 int _overdueCount(LoanDetail loan, {DateTime? today}) {
@@ -1199,7 +1270,8 @@ String financialStateText(LoanDetail loan, {DateTime? today}) {
     case 'fully_paid':
       final paidOn = summary.paidOn;
       return 'Fully paid${paidOn == null ? '' : ' on ${formatPhilippineDate(paidOn)}'}. '
-          'Nothing is owed.';
+          'Nothing is owed.'
+          '${loan.overpaidCentavos > 0 ? ' ${formatPeso(loan.overpaidCentavos)} was overpaid and is held as credit.' : ''}';
   }
   final released = summary.borrowedOn == null
       ? 'Money released.'
@@ -1219,7 +1291,10 @@ String financialStateText(LoanDetail loan, {DateTime? today}) {
       ? ''
       : ' $overdue ${overdue == 1 ? 'installment is' : 'installments are'} '
             'past due.';
-  return '$released$paid$next$late';
+  final over = loan.overpaidCentavos > 0
+      ? ' ${formatPeso(loan.overpaidCentavos)} overpaid, held as credit.'
+      : '';
+  return '$released$paid$next$late$over';
 }
 
 class _PaymentLedger extends StatelessWidget {
@@ -1642,6 +1717,7 @@ class _LoanPaymentsState extends ConsumerState<_LoanPayments> {
               title: Text(formatPeso(item.amountCentavos)),
               subtitle: Text(
                 '${formatPhilippineDateTime(item.receivedAt)} · ${item.method}${item.reference.isEmpty ? '' : ' · ${item.reference}'}'
+                '${item.unappliedCentavos > 0 ? '\n${formatPeso(item.unappliedCentavos)} not applied (overpaid)' : ''}'
                 '${(item.lateReason?.isNotEmpty ?? false) ? '\nLate: ${item.lateReason}' : ''}',
               ),
               trailing: Row(
