@@ -1710,13 +1710,12 @@ class _LoanDocuments extends StatelessWidget {
       for (final (document, text) in [
         (
           LoanPrintDocument.statement,
-          'Balance, amount due now, installments and payments received, with '
-              'how to pay.',
+          'What is owed now: amount due, overdue installments, payments '
+              'received and how to pay. The full history is the ledger.',
         ),
         (
           LoanPrintDocument.agreement,
-          'Loan agreement with disclosure and schedule, for signing. Draft '
-              'wording until reviewed by a lawyer.',
+          'Loan agreement with disclosure and schedule, for signing.',
         ),
         (
           LoanPrintDocument.acknowledgment,

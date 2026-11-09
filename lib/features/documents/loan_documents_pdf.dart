@@ -6,10 +6,6 @@ part of 'loan_schedule_pdf.dart';
 class LoanDocumentsPdf {
   const LoanDocumentsPdf._();
 
-  /// The agreement wording has not been reviewed by a lawyer yet; while this
-  /// is false the agreement prints with a visible DRAFT banner.
-  static const agreementReviewed = false;
-
   // ---- Payment receipt ------------------------------------------------------
 
   static Future<Uint8List> receipt({
@@ -237,9 +233,13 @@ class LoanDocumentsPdf {
             ),
           ),
           pw.SizedBox(height: 16),
-          _sectionTitle('INSTALLMENTS'),
+          // Only what is still owed; the full history is the payment ledger.
+          _sectionTitle('STILL TO PAY'),
           pw.SizedBox(height: 6),
-          LoanSchedulePdf._ledgerTable(loan.ledgerRows(asOf: date)),
+          if (unpaid.isEmpty)
+            pw.Text('Nothing left to pay.')
+          else
+            _unpaidTable(unpaid, today),
           pw.SizedBox(height: 16),
           _sectionTitle('PAYMENTS RECEIVED'),
           pw.SizedBox(height: 6),
@@ -388,22 +388,6 @@ class LoanDocumentsPdf {
         header: (_) => _businessHeader(business, 'LOAN AGREEMENT'),
         footer: (context) => _footer(DateTime.now(), context),
         build: (context) => [
-          if (!agreementReviewed) ...[
-            pw.SizedBox(height: 8),
-            pw.Container(
-              padding: const pw.EdgeInsets.all(8),
-              color: PdfColor.fromHex('#FFF4E5'),
-              child: pw.Text(
-                'DRAFT: wording pending legal review. Do not sign until '
-                'approved.',
-                style: pw.TextStyle(
-                  fontSize: 9,
-                  fontWeight: pw.FontWeight.bold,
-                  color: PdfColor.fromHex('#9A4A00'),
-                ),
-              ),
-            ),
-          ],
           pw.SizedBox(height: 12),
           pw.Text(
             'This Loan Agreement for loan '
@@ -564,6 +548,66 @@ class LoanDocumentsPdf {
       ),
     );
     return doc.save();
+  }
+
+  /// Unpaid installments: what each still needs, and whether it is overdue.
+  static pw.Widget _unpaidTable(List<Installment> unpaid, DateTime today) =>
+      pw.Table(
+        border: pw.TableBorder.all(color: LoanSchedulePdf._border, width: .55),
+        columnWidths: const {
+          0: pw.FixedColumnWidth(26),
+          1: pw.FlexColumnWidth(1.3),
+          2: pw.FlexColumnWidth(1.3),
+          3: pw.FlexColumnWidth(1.3),
+          4: pw.FlexColumnWidth(1.3),
+          5: pw.FlexColumnWidth(1.4),
+        },
+        children: [
+          pw.TableRow(
+            decoration: pw.BoxDecoration(color: LoanSchedulePdf._blue),
+            children: [
+              LoanSchedulePdf._headerCell('#'),
+              LoanSchedulePdf._headerCell('Due date'),
+              LoanSchedulePdf._headerCell('Installment', right: true),
+              LoanSchedulePdf._headerCell('Paid so far', right: true),
+              LoanSchedulePdf._headerCell('Still owed', right: true),
+              LoanSchedulePdf._headerCell('Status'),
+            ],
+          ),
+          for (var i = 0; i < unpaid.length; i++)
+            pw.TableRow(
+              decoration: pw.BoxDecoration(
+                color: i.isOdd ? LoanSchedulePdf._paleBlue : PdfColors.white,
+              ),
+              children: [
+                LoanSchedulePdf._cell('${unpaid[i].sequence}', center: true),
+                LoanSchedulePdf._cell(formatPhilippineDate(unpaid[i].dueDate)),
+                LoanSchedulePdf._cell(
+                  LoanSchedulePdf._money(unpaid[i].amountCentavos),
+                  right: true,
+                ),
+                LoanSchedulePdf._cell(
+                  LoanSchedulePdf._money(unpaid[i].paidCentavos),
+                  right: true,
+                ),
+                LoanSchedulePdf._cell(
+                  LoanSchedulePdf._money(unpaid[i].outstandingCentavos),
+                  right: true,
+                  bold: true,
+                ),
+                LoanSchedulePdf._cell(_dueStatus(unpaid[i].dueDate, today)),
+              ],
+            ),
+        ],
+      );
+
+  static String _dueStatus(DateTime due, DateTime today) {
+    final day = DateTime(due.year, due.month, due.day);
+    if (day.isBefore(today)) {
+      final days = today.difference(day).inDays;
+      return 'Overdue $days day${days == 1 ? '' : 's'}';
+    }
+    return day == today ? 'Due today' : 'Upcoming';
   }
 
   // ---- Shared pieces --------------------------------------------------------

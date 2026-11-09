@@ -16,7 +16,7 @@ enum LoanPrintDocument {
   schedule('Loan schedule', 'schedule', Icons.calendar_month_outlined),
   ledger('Payment ledger', 'payment-ledger', Icons.receipt_long_outlined),
   statement('Statement of account', 'statement', Icons.request_page_outlined),
-  agreement('Loan agreement (draft)', 'agreement', Icons.gavel_outlined),
+  agreement('Loan agreement', 'agreement', Icons.gavel_outlined),
   acknowledgment(
     'Acknowledgment of release',
     'acknowledgment-of-release',

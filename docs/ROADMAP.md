@@ -136,8 +136,8 @@ Open: the remaining PDFs, legal review, and turning on the weekly backup task.
 - [x] Paperclip evidence count in the Loans list, Documents page and loan Documents tab
 - [x] Exports open the system "Save to" picker on Android
 - [x] Payment receipt PDF (A5, verified payments only; amount in words; not a BIR official receipt)
-- [x] Statement of account PDF (balance, past due, amount due now, installments, payments, how to pay)
-- [x] Loan agreement PDF with disclosure and schedule (prints as DRAFT until legal review)
+- [x] Statement of account PDF (amount due now, past due, unpaid installments only, payments, how to pay; full history stays in the ledger)
+- [x] Loan agreement PDF with disclosure and schedule (wording still to be reviewed by counsel)
 - [x] Acknowledgment of money release PDF
 - [x] Business name and contacts on every PDF (was "LENDING MANAGER")
 - [ ] Bulk printing of statements
