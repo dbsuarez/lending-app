@@ -75,6 +75,21 @@ reach the phone only after the next install.
       and **View receipt** (print or save as PDF).
 - [ ] Your phone and email at the bottom.
 
+## Penalties *(web)*
+
+- [ ] Settings → **Default penalties**: choose None, Fixed amount, Percentage of
+      overdue or Manual, and the grace days (default 3). New loans start with it.
+- [ ] New loan: the Terms step shows **Penalties** with **Change** (per loan,
+      while it is a draft). Existing loans stay "None" and are never charged.
+- [ ] A loan with fixed/percentage penalties: once an installment is unpaid past
+      the grace days, a penalty appears, and again at every payday cutoff while
+      it stays unpaid. See the loan's Overview → **Penalties** card and the
+      **Penalty** column on Schedule.
+- [ ] **Waive** a penalty (reason required). A paid penalty cannot be waived.
+- [ ] Manual (or any loan with penalties): **Add penalty** on the card.
+- [ ] Payments pay **penalty → interest → principal** on the oldest installment.
+- [ ] The agreement PDF and the customer page show that loan's penalty terms.
+
 ## Settings
 
 - [ ] **Back up everything**: one checked file, with uploaded files included.
@@ -106,7 +121,5 @@ you can put that one loan back afterwards.
 
 ## Still to come
 
-- Penalties (fixed amount, percentage of overdue, or manual; charged every
-  cutoff while late; new loans only).
 - Correct Terms for loans that already have payments.
 - Legal review, then final agreement wording.

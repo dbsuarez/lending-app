@@ -300,9 +300,12 @@ class LoanDocumentsPdf {
     required BusinessProfile business,
     Borrower? borrower,
     DateTime? releasedOn,
+    PenaltyPolicy penalty = PenaltyPolicy.none,
   }) async {
     final s = loan.summary;
-    final interest = s.totalCentavos - s.principalCentavos;
+    final charged = loan.installments.fold(0, (t, i) => t + i.penaltyCentavos);
+    // The agreement shows the loan as agreed: without penalties charged since.
+    final interest = s.totalCentavos - charged - s.principalCentavos;
     final n = loan.installments.length;
     final rate = (s.monthlyRateBasisPoints / 100).toStringAsFixed(2);
     final first = loan.installments.isEmpty
@@ -337,7 +340,7 @@ class LoanDocumentsPdf {
       ),
       (
         'Repayment',
-        'The Borrower will repay ${LoanSchedulePdf._money(s.totalCentavos)} in '
+        'The Borrower will repay ${LoanSchedulePdf._money(s.totalCentavos - charged)} in '
             '$n installment${n == 1 ? '' : 's'} on the dates in the schedule '
             'below${first == null ? '' : ', from ${formatPhilippineDate(first)} to ${formatPhilippineDate(last!)}'}. '
             'Payments may be made in cash or by transfer to the Lender\'s '
@@ -346,14 +349,18 @@ class LoanDocumentsPdf {
       (
         'How payments are applied',
         'Each payment is applied to the oldest unpaid installment, first to '
-            'interest and then to principal. Any amount above what is due is '
-            'held as credit for the next installment.',
+            '${penalty.charges ? 'any penalty, then ' : ''}interest and then to '
+            'principal. Any amount above what is due is held as credit for the '
+            'next installment.',
       ),
       (
         'Late payment',
-        'No penalty or late charge is imposed. If a payment will be late, the '
-            'Borrower agrees to tell the Lender the reason and the date '
-            'payment will be made.',
+        '${switch (penalty.mode) {
+              'fixed' || 'percentage' => 'A penalty of ${describePenalty(penalty)[0].toLowerCase()}${describePenalty(penalty).substring(1)} ',
+              'manual' => 'The Lender may charge a penalty on a late installment; the amount and reason are recorded and shown to the Borrower. ',
+              _ => 'No penalty or late charge is imposed. ',
+            }}If a payment will be late, the Borrower agrees to tell the Lender '
+            'the reason and the date payment will be made.',
       ),
       (
         'Early payment',
@@ -423,13 +430,19 @@ class LoanDocumentsPdf {
           _rows([
             ('Amount borrowed', LoanSchedulePdf._money(s.principalCentavos)),
             ('Finance charge (interest)', LoanSchedulePdf._money(interest)),
-            ('Total to be repaid', LoanSchedulePdf._money(s.totalCentavos)),
+            (
+              'Total to be repaid',
+              LoanSchedulePdf._money(s.totalCentavos - charged),
+            ),
             (
               'Interest rate',
               '$rate% per month, flat, for ${s.termMonths} months',
             ),
             ('Number of installments', '$n'),
-            ('Penalties and other charges', 'None'),
+            (
+              'Penalties and other charges',
+              penalty.charges ? describePenalty(penalty) : 'None',
+            ),
           ]),
           pw.SizedBox(height: 12),
           _sectionTitle('TERMS'),
@@ -454,7 +467,17 @@ class LoanDocumentsPdf {
           _sectionTitle('REPAYMENT SCHEDULE'),
           pw.SizedBox(height: 6),
           LoanSchedulePdf._scheduleTable(
-            loan.installments,
+            // As agreed: amounts without penalties charged since.
+            [
+              for (final i in loan.installments)
+                Installment(
+                  sequence: i.sequence,
+                  dueDate: i.dueDate,
+                  amountCentavos: i.amountCentavos - i.penaltyCentavos,
+                  principalCentavos: i.principalCentavos,
+                  interestCentavos: i.interestCentavos,
+                ),
+            ],
             LoanSchedulePdf._blue,
             LoanSchedulePdf._paleBlue,
             LoanSchedulePdf._border,

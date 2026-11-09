@@ -457,6 +457,7 @@ const _sectionNames = {
   'loan_amendments': 'loan corrections / refinance records',
   'collection_activities': 'collection notes',
   'loan_share_links': 'customer links',
+  'penalty_charges': 'penalties',
 };
 
 /// Readable list of differences between the loan now and after the restore.

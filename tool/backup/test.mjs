@@ -79,7 +79,7 @@ const { bytes } = buildArchive({
   tables, balances: sqlBalances,
   files: [{ bucket: 'loan-evidence', path: `${org}/${loans[0]}/receipt.jpg`, bytes: receipt }],
 });
-ok('every table has rows to prove (except invitations)', TABLES.filter((t) => t !== 'staff_invitations').every((t) => tables[t].length > 0),
+ok('every table has rows to prove (except invitations and penalties: see penalties_test)', TABLES.filter((t) => t !== 'staff_invitations' && t !== 'penalty_charges').every((t) => tables[t].length > 0),
   TABLES.map((t) => `${t}=${tables[t].length}`).join(' '));
 
 // ---- 3. Check it ------------------------------------------------------------

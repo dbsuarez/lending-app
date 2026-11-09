@@ -4,6 +4,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import '../../core/formatting.dart';
 import '../../domain/models/models.dart';
+import '../penalties/penalty_widgets.dart' show describePenalty;
 import '../settings/business_profile_provider.dart';
 
 part 'loan_documents_pdf.dart';

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../penalties/penalty_widgets.dart';
 import '../documents/evidence_counts.dart';
 import '../documents/loan_evidence_section.dart';
 import '../../core/widgets/table_columns.dart';
@@ -136,7 +137,7 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
         Expanded(
           child: TabBarView(
             children: [
-              _Overview(loan),
+              _Overview(loan, onChanged: _reload),
               _Schedule(loan.installments),
               _PaymentLedger(loan),
               _LoanPayments(loan.summary.id, onChanged: _reload),
@@ -1040,8 +1041,9 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
 }
 
 class _Overview extends StatelessWidget {
-  const _Overview(this.loan);
+  const _Overview(this.loan, {this.onChanged});
   final LoanDetail loan;
+  final VoidCallback? onChanged;
 
   @override
   Widget build(BuildContext context) => ListView(
@@ -1120,6 +1122,10 @@ class _Overview extends StatelessWidget {
           subtitle: Text(financialStateText(loan)),
         ),
       ),
+      if (loan.summary.status != 'cancelled') ...[
+        const SizedBox(height: 12),
+        LoanPenaltiesCard(loan: loan, onChanged: onChanged),
+      ],
     ],
   );
 
@@ -1423,7 +1429,8 @@ class _ScheduleState extends State<_Schedule> {
           1 => left.dueDate.compareTo(right.dueDate),
           2 => left.principalCentavos.compareTo(right.principalCentavos),
           3 => left.interestCentavos.compareTo(right.interestCentavos),
-          4 => left.amountCentavos.compareTo(right.amountCentavos),
+          4 => left.penaltyCentavos.compareTo(right.penaltyCentavos),
+          5 => left.amountCentavos.compareTo(right.amountCentavos),
           _ => 0,
         };
         return sortAscending ? comparison : -comparison;
@@ -1440,6 +1447,11 @@ class _ScheduleState extends State<_Schedule> {
                   child: ListTile(
                     leading: CircleAvatar(child: Text('${item.sequence}')),
                     title: Text(formatPhilippineDate(item.dueDate)),
+                    subtitle: item.penaltyCentavos > 0
+                        ? Text(
+                            'Includes ${formatPeso(item.penaltyCentavos)} penalty',
+                          )
+                        : null,
                     trailing: Text(
                       formatPeso(item.amountCentavos),
                       textAlign: TextAlign.right,
@@ -1458,6 +1470,7 @@ class _ScheduleState extends State<_Schedule> {
                   'Due date',
                   'Principal',
                   'Interest',
+                  'Penalty',
                   'Scheduled',
                 ],
                 builder: (view) => Card(
@@ -1483,6 +1496,11 @@ class _ScheduleState extends State<_Schedule> {
                         onSort: _sort,
                       ),
                       DataColumn(
+                        label: const Text('Penalty'),
+                        numeric: true,
+                        onSort: _sort,
+                      ),
+                      DataColumn(
                         label: const Text('Scheduled'),
                         numeric: true,
                         onSort: _sort,
@@ -1496,6 +1514,13 @@ class _ScheduleState extends State<_Schedule> {
                             DataCell(Text(formatPhilippineDate(item.dueDate))),
                             DataCell(Text(formatPeso(item.principalCentavos))),
                             DataCell(Text(formatPeso(item.interestCentavos))),
+                            DataCell(
+                              Text(
+                                item.penaltyCentavos == 0
+                                    ? '—'
+                                    : formatPeso(item.penaltyCentavos),
+                              ),
+                            ),
                             DataCell(Text(formatPeso(item.amountCentavos))),
                           ]),
                         ),

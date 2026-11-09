@@ -83,7 +83,7 @@ class SupabaseLoansRepository {
     final installmentRows = await _client
         .from('installments')
         .select(
-          'sequence, due_date, principal_centavos, interest_centavos, scheduled_centavos',
+          'sequence, due_date, principal_centavos, interest_centavos, scheduled_centavos, penalty_centavos',
         )
         .eq('organization_id', orgId)
         .eq('loan_id', id)
@@ -173,6 +173,7 @@ class SupabaseLoansRepository {
             interestCentavos: item['interest_centavos'] as int,
             paidCentavos: paidBySequence[item['sequence'] as int] ?? 0,
             lastPaymentAt: paidAtBySequence[item['sequence'] as int],
+            penaltyCentavos: item['penalty_centavos'] as int? ?? 0,
           ),
       ],
     );
@@ -400,8 +401,74 @@ class SupabaseLoansRepository {
           : DateTime.parse(disbursement['disbursed_on'] as String),
       method: disbursement?['method'] as String?,
       reference: disbursement?['reference'] as String?,
+      penaltyPolicy: PenaltyPolicy.fromJson(snapshot['penalty_policy']),
     );
   }
+
+  // Penalties (see migration 202611090043_penalties.sql).
+
+  /// Charges every automatic penalty due up to today. Returns how many.
+  Future<int> assessPenalties({String? loanId}) async =>
+      (await _client.rpc('assess_penalties', params: {'p_loan_id': ?loanId})
+              as num?)
+          ?.toInt() ??
+      0;
+
+  Future<void> setPenaltyPolicy(String loanId, PenaltyPolicy policy) =>
+      _client.rpc(
+        'set_loan_penalty_policy',
+        params: {'p_loan_id': loanId, 'p_policy': policy.toJson()},
+      );
+
+  Future<List<PenaltyCharge>> fetchPenaltyCharges(String loanId) async {
+    final rows = await _client
+        .from('penalty_charges')
+        .select(
+          'id, charge_date, amount_centavos, source, note, waived_at, waive_reason, installment:installments!inner(sequence)',
+        )
+        .eq('loan_id', loanId)
+        .order('charge_date');
+    return [
+      for (final row in rows)
+        PenaltyCharge(
+          id: row['id'] as String,
+          sequence: (row['installment'] as Map)['sequence'] as int,
+          chargeDate: DateTime.parse(row['charge_date'] as String),
+          amountCentavos: row['amount_centavos'] as int,
+          source: row['source'] as String,
+          note: row['note'] as String?,
+          waived: row['waived_at'] != null,
+          waiveReason: row['waive_reason'] as String?,
+        ),
+    ];
+  }
+
+  Future<void> addPenalty({
+    required String loanId,
+    required int sequence,
+    required int amountCentavos,
+    required String note,
+  }) async {
+    final row = await _client
+        .from('installments')
+        .select('id')
+        .eq('loan_id', loanId)
+        .eq('sequence', sequence)
+        .single();
+    await _client.rpc(
+      'add_penalty_charge',
+      params: {
+        'p_installment_id': row['id'],
+        'p_amount_centavos': amountCentavos,
+        'p_note': note,
+      },
+    );
+  }
+
+  Future<void> waivePenalty(String chargeId, String reason) => _client.rpc(
+    'waive_penalty_charge',
+    params: {'p_charge_id': chargeId, 'p_reason': reason},
+  );
 
   /// Edits a draft, or corrects an active loan with no payments. Returns the
   /// amendment id (for undo).

@@ -345,7 +345,14 @@
         }
         line('Total to repay', money(loan.total_centavos));
         if (t.installment_count) line('Installments', String(t.installment_count));
-        line('Penalties or late charges', 'None');
+        var pp = t.penalty_policy || {};
+        var start = pp.grace_days ? ' per payday cutoff while late, starting ' + plural(pp.grace_days, 'day') + ' after the due date' : ' per payday cutoff while late';
+        line('Penalties or late charges',
+          t.penalties === 'fixed' ? money(pp.amount_centavos) + start
+          : t.penalties === 'percentage' ? (pp.rate_basis_points / 100).toFixed(2) + '% of the unpaid installment' + start
+          : t.penalties === 'manual' ? 'May be charged on a late installment'
+          : 'None');
+        if (t.penalties_charged_centavos > 0) line('Penalties charged so far', money(t.penalties_charged_centavos));
         box.appendChild(dl);
         box.appendChild(el('p', null,
           'Payments go to the oldest unpaid installment first. ' +
@@ -416,6 +423,7 @@
           var owed = item.outstanding_centavos != null ? item.outstanding_centavos : item.scheduled_centavos - item.paid_centavos;
           var meta = item.status === 'paid' ? 'Paid in full'
             : (item.paid_centavos > 0 ? money(item.paid_centavos) + ' paid · ' : '') + money(owed) + ' still owed';
+          if (item.penalty_centavos > 0) meta += ' · includes ' + money(item.penalty_centavos) + ' penalty';
           row.appendChild(el('span', 'meta', meta));
           row.appendChild(el('span', 'badge ' + item.status, label(item.status)));
           schedule.appendChild(row);

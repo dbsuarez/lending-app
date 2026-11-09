@@ -23,15 +23,81 @@ class Installment {
     required this.interestCentavos,
     this.paidCentavos = 0,
     this.lastPaymentAt,
+    this.penaltyCentavos = 0,
   });
+
+  /// [amountCentavos] includes [penaltyCentavos] (penalties charged so far).
   final int sequence,
       amountCentavos,
       principalCentavos,
       interestCentavos,
-      paidCentavos;
+      paidCentavos,
+      penaltyCentavos;
   final DateTime dueDate;
   final DateTime? lastPaymentAt;
   int get outstandingCentavos => amountCentavos - paidCentavos;
+}
+
+/// How a loan charges late penalties (fixed once the loan is released).
+class PenaltyPolicy {
+  const PenaltyPolicy({
+    this.mode = 'none',
+    this.amountCentavos,
+    this.rateBasisPoints,
+    this.graceDays = 3,
+  });
+
+  /// none, fixed, percentage or manual.
+  final String mode;
+  final int? amountCentavos, rateBasisPoints;
+  final int graceDays;
+
+  static const none = PenaltyPolicy();
+
+  bool get charges => mode != 'none';
+
+  Map<String, dynamic> toJson() => {
+    'mode': mode,
+    'grace_days': graceDays,
+    if (mode == 'fixed') 'amount_centavos': amountCentavos,
+    if (mode == 'percentage') 'rate_basis_points': rateBasisPoints,
+  };
+
+  static PenaltyPolicy fromJson(Object? json) {
+    if (json is! Map) return none;
+    return PenaltyPolicy(
+      mode: '${json['mode'] ?? 'none'}',
+      amountCentavos: (json['amount_centavos'] as num?)?.toInt(),
+      rateBasisPoints: (json['rate_basis_points'] as num?)?.toInt(),
+      graceDays: (json['grace_days'] as num?)?.toInt() ?? 3,
+    );
+  }
+
+  String get typeLabel => switch (mode) {
+    'fixed' => 'Fixed amount',
+    'percentage' => 'Percentage of overdue',
+    'manual' => 'Manual',
+    _ => 'None',
+  };
+}
+
+/// One penalty charged on an installment.
+class PenaltyCharge {
+  const PenaltyCharge({
+    required this.id,
+    required this.sequence,
+    required this.chargeDate,
+    required this.amountCentavos,
+    required this.source,
+    this.note,
+    this.waived = false,
+    this.waiveReason,
+  });
+  final String id, source;
+  final int sequence, amountCentavos;
+  final DateTime chargeDate;
+  final String? note, waiveReason;
+  final bool waived;
 }
 
 class LoanQuote {
@@ -155,7 +221,9 @@ class LoanEditTerms {
     this.disbursedOn,
     this.method,
     this.reference,
+    this.penaltyPolicy = PenaltyPolicy.none,
   });
+  final PenaltyPolicy penaltyPolicy;
   final DateTime firstDueDate;
   final List<int> paydayPattern;
   final DateTime? disbursedOn;

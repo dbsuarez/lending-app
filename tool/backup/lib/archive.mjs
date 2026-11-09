@@ -22,6 +22,7 @@ export const TABLES = [
   'borrowers',
   'loans',
   'installments',
+  'penalty_charges',
   'loan_documents',
   'loan_disbursements',
   'loan_amendments',
@@ -33,6 +34,9 @@ export const TABLES = [
   'staff_invitations',
   'audit_events',
 ];
+
+/** Tables added later; backups made before them simply have none. */
+export const OPTIONAL = ['penalty_charges'];
 
 /** Tables the app cannot work without; a backup missing rows here is useless. */
 export const REQUIRED = ['organizations', 'organization_members'];
@@ -179,6 +183,7 @@ export function readArchive(bytes) {
   for (const t of TABLES) {
     const entry = entries[`tables/${t}.json`];
     const meta = manifest.tables?.[t];
+    if (!entry && !meta && OPTIONAL.includes(t)) { tables[t] = []; continue; }
     if (!entry || !meta) { problems.push(`${t}: missing`); tables[t] = []; continue; }
     if (sha256(entry) !== meta.sha256) problems.push(`${t}: checksum mismatch (file damaged or edited)`);
     try {
@@ -215,6 +220,8 @@ export function readArchive(bytes) {
     ['payment_corrections', 'payment_id', payments],
     ['collection_activities', 'loan_id', loans],
     ['loan_share_links', 'loan_id', loans],
+    ['penalty_charges', 'loan_id', loans],
+    ['penalty_charges', 'installment_id', insts],
   ];
   for (const [t, col, set] of refs) {
     const broken = tables[t].filter((r) => r[col] != null && !set.has(r[col])).length;
@@ -272,6 +279,7 @@ export function loanStateFromTables(tables, loanId) {
     loan_amendments: byLoan('loan_amendments'),
     collection_activities: byLoan('collection_activities'),
     loan_share_links: byLoan('loan_share_links'),
+    penalty_charges: byLoan('penalty_charges'),
   };
 }
 

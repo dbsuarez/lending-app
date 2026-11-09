@@ -98,6 +98,8 @@ Open: the remaining PDFs, legal review, and turning on the weekly backup task.
 - [x] Early payoff with a chosen payoff date; Undo Early Payoff (shown only when one exists)
 - [x] Loan header: actions wrap on their own row; copy button for the loan number
 - [x] Every loan/payment change refreshes Ongoing tags, Collections, Dashboard and aging
+- [x] Early payoff: choose the interest rule per payoff (waive future / this month / all), with preview
+- [x] Penalties: none, fixed, percentage of overdue, manual; grace days (default 3); charged at every payday cutoff while late; payments pay penalty, interest, principal; waive with reason; new loans only
 - [ ] Correct Terms for loans with payments (re-apply payments, with preview)
 
 ## Payments and synchronization

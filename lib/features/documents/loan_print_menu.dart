@@ -42,13 +42,11 @@ Future<void> printLoanDocument(
   if (document == LoanPrintDocument.agreement ||
       document == LoanPrintDocument.acknowledgment) {
     borrower = await _borrower(container, loan.summary.borrowerId);
-    if (loan.summary.status != 'draft') {
-      try {
-        terms = await container
-            .read(loansControllerProvider.notifier)
-            .fetchEditTerms(loan.summary.id);
-      } catch (_) {}
-    }
+    try {
+      terms = await container
+          .read(loansControllerProvider.notifier)
+          .fetchEditTerms(loan.summary.id);
+    } catch (_) {}
   }
   if (document == LoanPrintDocument.acknowledgment &&
       terms?.disbursedOn == null) {
@@ -75,6 +73,7 @@ Future<void> printLoanDocument(
       business: business,
       borrower: borrower,
       releasedOn: terms?.disbursedOn,
+      penalty: terms?.penaltyPolicy ?? PenaltyPolicy.none,
     ),
     LoanPrintDocument.acknowledgment => () => LoanDocumentsPdf.acknowledgment(
       loan: loan,

@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'backup_dialogs.dart';
 import 'loan_restore.dart';
+import '../../domain/models/models.dart';
+import '../penalties/penalty_widgets.dart';
 import '../../core/widgets/window_title.dart';
 import '../../core/undo/undo_controller.dart';
 import '../../core/security/app_lock.dart';
@@ -181,10 +183,45 @@ class SettingsScreen extends ConsumerWidget {
                   : null,
             ),
             const Divider(height: 1),
-            const ListTile(
-              leading: Icon(Icons.gavel_outlined),
-              title: Text('Default penalties'),
-              subtitle: Text('None'),
+            Consumer(
+              builder: (context, ref, _) {
+                final policy =
+                    ref.watch(penaltyDefaultProvider).value ??
+                    PenaltyPolicy.none;
+                return ListTile(
+                  leading: const Icon(Icons.gavel_outlined),
+                  title: Text('Default penalties: ${policy.typeLabel}'),
+                  subtitle: Text(
+                    '${describePenalty(policy)} Used for new loans; existing '
+                    'loans keep their own.',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: AppConfig.hasSupabase
+                      ? () async {
+                          final next = await PenaltyPolicyDialog.show(
+                            context,
+                            initial: policy,
+                            title: 'Default penalties',
+                            note:
+                                'New loans start with this. You can change it '
+                                'per loan while it is a draft.',
+                          );
+                          if (next == null || !context.mounted) return;
+                          final undo = undoOf(context);
+                          try {
+                            await savePenaltyDefault(next);
+                            ref.invalidate(penaltyDefaultProvider);
+                            undo.notify('Default penalties saved.');
+                          } catch (_) {
+                            undo.record(
+                              'Could not save. Only the owner can change '
+                              'this.',
+                            );
+                          }
+                        }
+                      : null,
+                );
+              },
             ),
           ],
         ),

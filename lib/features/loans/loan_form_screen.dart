@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../penalties/penalty_widgets.dart';
 import '../../core/formatting.dart';
 import '../../core/undo/undo_controller.dart';
 import '../../domain/models/models.dart';
@@ -41,13 +42,31 @@ class _LoanFormScreenState extends ConsumerState<LoanFormScreen> {
       releaseReference = TextEditingController();
   DateTime? releaseDate;
   String? releaseMethod;
+
+  /// Null until chosen: new loans use the Settings default.
+  PenaltyPolicy? penalty;
+  PenaltyPolicy get _penalty =>
+      penalty ??
+      (editing
+          ? originalTerms?.penaltyPolicy ?? PenaltyPolicy.none
+          : PenaltyPolicy.none);
   bool get correctingActive => original?.summary.status == 'active';
 
   @override
   void initState() {
     super.initState();
     firstDue = _nextPayday(DateTime.now(), pattern);
-    if (editing) _loadOriginal();
+    if (editing) {
+      _loadOriginal();
+    } else {
+      // New loans start with the Settings default.
+      ref
+          .read(penaltyDefaultProvider.future)
+          .then((policy) {
+            if (mounted && penalty == null) setState(() => penalty = policy);
+          })
+          .catchError((_) {});
+    }
   }
 
   Future<void> _loadOriginal() async {
@@ -133,6 +152,17 @@ class _LoanFormScreenState extends ConsumerState<LoanFormScreen> {
     if (!mounted) return;
     setState(() => saving = false);
     if (loanId != null) {
+      if (_penalty.charges) {
+        try {
+          await loans.setPenaltyPolicy(loanId, _penalty);
+        } catch (_) {
+          undo.record(
+            'Draft created, but its penalties could not be saved. Open the '
+            'draft and set them again.',
+          );
+        }
+      }
+      if (!mounted) return;
       undo.offer('Loan draft created.', () => loans.undoCreateDraft(loanId));
       // Open the new draft (the Loans list defaults to Active, so the draft
       // would not be listed there); its next step is Confirm & Disburse.
@@ -175,6 +205,9 @@ class _LoanFormScreenState extends ConsumerState<LoanFormScreen> {
         reference: correctingActive ? releaseReference.text.trim() : null,
         reason: why,
       );
+      if (!correctingActive && penalty != null) {
+        await loans.setPenaltyPolicy(loan.summary.id, penalty!);
+      }
       if (!mounted) return;
       undo.offer(
         correctingActive
@@ -468,11 +501,28 @@ class _LoanFormScreenState extends ConsumerState<LoanFormScreen> {
             if (v != null) setState(() => firstDue = v);
           },
         ),
-        const ListTile(
+        ListTile(
           contentPadding: EdgeInsets.zero,
-          leading: Icon(Icons.gavel_outlined),
-          title: Text('Penalty policy: None'),
-          subtitle: Text('Default. No penalties are assessed or backdated.'),
+          leading: const Icon(Icons.gavel_outlined),
+          title: Text('Penalties: ${_penalty.typeLabel}'),
+          subtitle: Text(
+            correctingActive
+                ? '${describePenalty(_penalty)} Fixed since the loan was released.'
+                : describePenalty(_penalty),
+          ),
+          trailing: correctingActive
+              ? null
+              : TextButton(
+                  onPressed: () async {
+                    final next = await PenaltyPolicyDialog.show(
+                      context,
+                      initial: _penalty,
+                      title: 'Penalties for this loan',
+                    );
+                    if (next != null) setState(() => penalty = next);
+                  },
+                  child: const Text('Change'),
+                ),
         ),
       ],
     );

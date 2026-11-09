@@ -22,6 +22,7 @@ const backupTables = [
   'borrowers',
   'loans',
   'installments',
+  'penalty_charges',
   'loan_documents',
   'loan_disbursements',
   'loan_amendments',
@@ -35,6 +36,9 @@ const backupTables = [
 ];
 
 const _evidenceBucket = 'loan-evidence';
+
+/// Tables added later; backups made before them simply have none.
+const _optionalTables = {'penalty_charges'};
 
 List<String> _pkOf(String table) => table == 'organization_members'
     ? const ['organization_id', 'user_id']
@@ -246,6 +250,7 @@ BackupCheck readBackup(Uint8List bytes) {
     final bytes = entry('tables/$t.json');
     final m = meta[t] as Map?;
     tables[t] = [];
+    if (bytes == null && m == null && _optionalTables.contains(t)) continue;
     if (bytes == null || m == null) {
       problems.add('$t: missing');
       continue;
@@ -292,6 +297,8 @@ BackupCheck readBackup(Uint8List bytes) {
     ('payment_corrections', 'payment_id', ids('payments')),
     ('collection_activities', 'loan_id', loans),
     ('loan_share_links', 'loan_id', loans),
+    ('penalty_charges', 'loan_id', loans),
+    ('penalty_charges', 'installment_id', ids('installments')),
   ];
   for (final (t, col, set) in refs) {
     final broken = tables[t]!
@@ -469,6 +476,7 @@ const loanStateTables = [
   'loan_amendments',
   'collection_activities',
   'loan_share_links',
+  'penalty_charges',
 ];
 
 /// One loan's records in the shape restore_loan expects; null when the loan
@@ -497,6 +505,7 @@ Map<String, dynamic>? loanStateFromBackup(
     'loan_amendments': byLoan('loan_amendments'),
     'collection_activities': byLoan('collection_activities'),
     'loan_share_links': byLoan('loan_share_links'),
+    'penalty_charges': byLoan('penalty_charges'),
   };
 }
 

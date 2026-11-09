@@ -27,7 +27,50 @@ class LoansController extends AsyncNotifier<List<LoanSummary>> {
   Future<List<LoanSummary>> build() async {
     if (!isLive) return List.unmodifiable(_localLoans);
     _repository = SupabaseLoansRepository(Supabase.instance.client);
+    // Penalties due up to today are charged before balances are shown.
+    try {
+      await _repository!.assessPenalties();
+    } catch (_) {
+      // Viewers cannot charge; balances still load.
+    }
     return _repository!.fetchLoans();
+  }
+
+  // ---- Penalties ----
+
+  Future<List<PenaltyCharge>> fetchPenaltyCharges(String loanId) async =>
+      isLive ? _repository!.fetchPenaltyCharges(loanId) : const [];
+
+  Future<PenaltyPolicy> fetchPenaltyPolicy(String loanId) async {
+    if (!isLive) return PenaltyPolicy.none;
+    return (await _repository!.fetchEditTerms(loanId)).penaltyPolicy;
+  }
+
+  Future<void> setPenaltyPolicy(String loanId, PenaltyPolicy policy) async {
+    if (!isLive) return;
+    await _repository!.setPenaltyPolicy(loanId, policy);
+  }
+
+  /// Throws (with the server's message) when refused.
+  Future<void> addPenalty({
+    required String loanId,
+    required int sequence,
+    required int amountCentavos,
+    required String note,
+  }) async {
+    await _repository!.addPenalty(
+      loanId: loanId,
+      sequence: sequence,
+      amountCentavos: amountCentavos,
+      note: note,
+    );
+    await _reloadAll();
+  }
+
+  /// Throws (with the server's message) when refused.
+  Future<void> waivePenalty(String chargeId, String reason) async {
+    await _repository!.waivePenalty(chargeId, reason);
+    await _reloadAll();
   }
 
   Future<void> refresh() async {

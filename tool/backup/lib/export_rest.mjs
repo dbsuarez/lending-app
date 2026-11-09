@@ -1,6 +1,6 @@
 // Exports an organization through the app's normal API (signed in as the
 // owner), so it sees exactly what the app sees and needs no database password.
-import { TABLES, pkOf, orgColumnOf } from './archive.mjs';
+import { TABLES, OPTIONAL, pkOf, orgColumnOf } from './archive.mjs';
 
 const PAGE = 500; // below the API's 1000-row cap; paging continues until the exact count is reached
 
@@ -67,7 +67,16 @@ export async function exportOrganization(client, userId, { includeFiles = true, 
   const orgId = members[0].organization_id;
   const tables = {};
   for (const t of TABLES) {
-    tables[t] = await fetchAll(client, t, orgId);
+    try {
+      tables[t] = await fetchAll(client, t, orgId);
+    } catch (e) {
+      // A table added by a migration not yet applied to this project.
+      if (OPTIONAL.includes(t) && /PGRST205|HTTP 404/.test(e.message)) {
+        tables[t] = [];
+      } else {
+        throw e;
+      }
+    }
     onProgress(`${t}: ${tables[t].length}`);
   }
   let files = null;
