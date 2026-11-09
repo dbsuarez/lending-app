@@ -25,7 +25,7 @@ class SupabasePaymentsRepository {
     final rows = await _client
         .from('payments')
         .select(
-          'id, loan_id, amount_centavos, received_at, method, reference, status, unapplied_centavos, loan:loans(borrower:borrowers(first_name,last_name))',
+          'id, loan_id, amount_centavos, received_at, method, reference, status, unapplied_centavos, late_reason, loan:loans(borrower:borrowers(first_name,last_name))',
         )
         .eq('organization_id', await organizationId())
         .order('received_at', ascending: false);
@@ -40,6 +40,7 @@ class SupabasePaymentsRepository {
     required String reference,
     required String clientOperationId,
     required String deviceId,
+    String? lateReason,
   }) async {
     final result = await _client.rpc(
       'record_pending_payment',
@@ -51,10 +52,18 @@ class SupabasePaymentsRepository {
         'p_reference': reference,
         'p_client_operation_id': clientOperationId,
         'p_device_id': deviceId,
+        if (lateReason != null && lateReason.trim().isNotEmpty)
+          'p_late_reason': lateReason.trim(),
       },
     );
     return result as String;
   }
+
+  /// Sets or clears why a payment came after its due date.
+  Future<void> setLateReason(String paymentId, String reason) => _client.rpc(
+    'set_payment_late_reason',
+    params: {'p_payment_id': paymentId, 'p_reason': reason},
+  );
 
   Future<void> reject({required String paymentId, required String reason}) =>
       _client.rpc(
@@ -118,6 +127,7 @@ class SupabasePaymentsRepository {
       reference: row['reference'] as String? ?? '',
       status: row['status'] as String,
       unappliedCentavos: row['unapplied_centavos'] as int? ?? 0,
+      lateReason: row['late_reason'] as String?,
     );
   }
 }

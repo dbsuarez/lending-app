@@ -502,7 +502,9 @@ class SupabaseLoansRepository {
   Future<List<PaymentSummary>> fetchLoanPayments(String loanId) async {
     final rows = await _client
         .from('payments')
-        .select('id, amount_centavos, received_at, method, reference, status')
+        .select(
+          'id, amount_centavos, received_at, method, reference, status, late_reason',
+        )
         .eq('organization_id', await organizationId())
         .eq('loan_id', loanId)
         .order('received_at', ascending: false);
@@ -517,6 +519,7 @@ class SupabaseLoansRepository {
           method: row['method'] as String,
           reference: row['reference'] as String? ?? '',
           status: row['status'] as String,
+          lateReason: row['late_reason'] as String?,
         ),
     ];
   }

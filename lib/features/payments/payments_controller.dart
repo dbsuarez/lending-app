@@ -55,6 +55,7 @@ class PaymentsController extends AsyncNotifier<List<PaymentSummary>> {
     required DateTime receivedAt,
     required String method,
     required String reference,
+    String? lateReason,
   }) async {
     if (!isLive) await _initialBuild();
     state = const AsyncLoading();
@@ -70,6 +71,7 @@ class PaymentsController extends AsyncNotifier<List<PaymentSummary>> {
           reference: reference,
           clientOperationId: id,
           deviceId: '${kIsWeb ? 'web' : 'android'}-$userId',
+          lateReason: lateReason,
         );
         await _reloadAll();
         return saved;
@@ -86,6 +88,9 @@ class PaymentsController extends AsyncNotifier<List<PaymentSummary>> {
             reference: reference,
             status: method == 'Cash' ? 'verified' : 'pending',
             unappliedCentavos: 0,
+            lateReason: (lateReason?.trim().isEmpty ?? true)
+                ? null
+                : lateReason!.trim(),
           ),
         );
         state = AsyncData(List.unmodifiable(_localPayments));
@@ -116,6 +121,7 @@ class PaymentsController extends AsyncNotifier<List<PaymentSummary>> {
           reference: payment.reference,
           status: 'rejected',
           unappliedCentavos: payment.unappliedCentavos,
+          lateReason: payment.lateReason,
         );
         state = AsyncData(List.unmodifiable(_localPayments));
       }
@@ -206,6 +212,32 @@ class PaymentsController extends AsyncNotifier<List<PaymentSummary>> {
     }
   }
 
+  /// Sets or clears why [payment] came after its due date.
+  Future<bool> setLateReason(PaymentSummary payment, String reason) async {
+    try {
+      if (isLive) {
+        _repository ??= SupabasePaymentsRepository(Supabase.instance.client);
+        await _repository!.setLateReason(payment.id, reason);
+        await _reloadAll();
+        return true;
+      }
+      await _initialBuild();
+      final index = _localPayments.indexWhere((p) => p.id == payment.id);
+      if (index < 0) return false;
+      _localPayments[index] = _copy(
+        _localPayments[index],
+        receivedAt: _localPayments[index].receivedAt,
+        method: _localPayments[index].method,
+        reference: _localPayments[index].reference,
+        lateReason: reason.trim().isEmpty ? null : reason.trim(),
+      );
+      state = AsyncData(List.unmodifiable(_localPayments));
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Undo for [correctDetails].
   Future<bool> undoCorrection(String correctionId) async {
     try {
@@ -238,6 +270,7 @@ class PaymentsController extends AsyncNotifier<List<PaymentSummary>> {
     required DateTime receivedAt,
     required String method,
     required String reference,
+    Object? lateReason = _keep,
   }) => PaymentSummary(
     id: p.id,
     loanId: p.loanId,
@@ -248,7 +281,12 @@ class PaymentsController extends AsyncNotifier<List<PaymentSummary>> {
     reference: reference,
     status: p.status,
     unappliedCentavos: p.unappliedCentavos,
+    lateReason: identical(lateReason, _keep)
+        ? p.lateReason
+        : lateReason as String?,
   );
+
+  static const _keep = Object();
 
   /// Verifies several pending payments, oldest received first (so money is
   /// applied in the order it arrived). Returns the ids that were verified;
@@ -351,6 +389,7 @@ class PaymentsController extends AsyncNotifier<List<PaymentSummary>> {
       reference: payment.reference,
       status: status,
       unappliedCentavos: status == 'verified' ? payment.unappliedCentavos : 0,
+      lateReason: payment.lateReason,
     );
     state = AsyncData(List.unmodifiable(_localPayments));
   }

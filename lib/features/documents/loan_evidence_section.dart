@@ -19,6 +19,7 @@ import '../../domain/models/models.dart';
 const evidenceTypes = <(String, String)>[
   ('disbursement_evidence', 'Money release proof'),
   ('payment_evidence', 'Payment proof'),
+  ('late_payment_note', 'Late-payment reason / promise'),
   ('agreement', 'Signed agreement'),
   ('acknowledgment', 'Acknowledgment'),
   ('other', 'Other'),
@@ -112,8 +113,23 @@ class _LoanEvidenceSectionState extends ConsumerState<LoanEvidenceSection> {
       document: d,
       bytes: _download(d),
       signedUrl: () => _repository!.signedUrl(d.storagePath),
+      onChangeType: (type) => _changeType(d, type),
     ),
   );
+
+  Future<bool> _changeType(LoanDocumentSummary d, String type) async {
+    try {
+      await _repository!.setType(d.id, type);
+      await _load();
+      if (mounted) {
+        undoOf(context).notify('Moved to ${evidenceTypeLabel(type)}.');
+      }
+      return true;
+    } catch (_) {
+      if (mounted) undoOf(context).record('The category could not be changed.');
+      return false;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -173,16 +189,34 @@ class _LoanEvidenceSectionState extends ConsumerState<LoanEvidenceSection> {
         'Nothing uploaded yet. Use Upload to add a photo or PDF.',
       );
     } else {
-      body = Wrap(
-        spacing: 12,
-        runSpacing: 12,
+      body = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (final d in documents!)
-            _EvidenceTile(
-              document: d,
-              bytes: d.mimeType.startsWith('image/') ? _download(d) : null,
-              onOpen: () => _open(d),
-            ),
+          for (final (type, label) in evidenceTypes)
+            if (documents!.any((d) => d.type == type)) ...[
+              Padding(
+                padding: const EdgeInsets.only(top: 4, bottom: 8),
+                child: Text(
+                  '$label (${documents!.where((d) => d.type == type).length})',
+                  style: theme.textTheme.titleSmall,
+                ),
+              ),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  for (final d in documents!.where((d) => d.type == type))
+                    _EvidenceTile(
+                      document: d,
+                      bytes: d.mimeType.startsWith('image/')
+                          ? _download(d)
+                          : null,
+                      onOpen: () => _open(d),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+            ],
         ],
       );
     }
@@ -279,17 +313,52 @@ class _EvidenceTile extends StatelessWidget {
   }
 }
 
-class _EvidenceViewer extends StatelessWidget {
+class _EvidenceViewer extends StatefulWidget {
   const _EvidenceViewer({
     required this.document,
     required this.bytes,
     required this.signedUrl,
+    required this.onChangeType,
   });
   final LoanDocumentSummary document;
   final Future<Uint8List> bytes;
   final Future<Uri> Function() signedUrl;
+  final Future<bool> Function(String type) onChangeType;
+
+  @override
+  State<_EvidenceViewer> createState() => _EvidenceViewerState();
+}
+
+class _EvidenceViewerState extends State<_EvidenceViewer> {
+  late String type = widget.document.type;
+  LoanDocumentSummary get document => widget.document;
+  Future<Uint8List> get bytes => widget.bytes;
+  Future<Uri> Function() get signedUrl => widget.signedUrl;
 
   bool get isPdf => document.mimeType == 'application/pdf';
+
+  Widget _categoryMenu() => MenuAnchor(
+    menuChildren: [
+      for (final (value, label) in evidenceTypes)
+        MenuItemButton(
+          leadingIcon: Icon(value == type ? Icons.check : null, size: 18),
+          onPressed: value == type
+              ? null
+              : () async {
+                  if (await widget.onChangeType(value) && mounted) {
+                    setState(() => type = value);
+                  }
+                },
+          child: Text(label),
+        ),
+    ],
+    builder: (context, controller, _) => IconButton(
+      tooltip: 'Change category',
+      onPressed: () =>
+          controller.isOpen ? controller.close() : controller.open(),
+      icon: const Icon(Icons.label_outline),
+    ),
+  );
 
   Future<void> _save(BuildContext context) async {
     final data = await bytes;
@@ -328,12 +397,13 @@ class _EvidenceViewer extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
               subtitle: Text(
-                '${evidenceTypeLabel(document.type)} · '
+                '${evidenceTypeLabel(type)} · '
                 '${formatPhilippineDateTime(document.createdAt)} · '
                 '${(document.sizeBytes / 1048576).toStringAsFixed(2)} MB',
               ),
               trailing: Wrap(
                 children: [
+                  _categoryMenu(),
                   IconButton(
                     tooltip: 'Save a copy',
                     onPressed: () => _save(context),

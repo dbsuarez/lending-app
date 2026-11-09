@@ -271,8 +271,16 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
                               : null,
                           cells: view.cells([
                             DataCell(
-                              Text(
-                                formatPhilippineDateTime(payment.receivedAt),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    formatPhilippineDateTime(
+                                      payment.receivedAt,
+                                    ),
+                                  ),
+                                  LateReasonMarker(payment.lateReason),
+                                ],
                               ),
                             ),
                             DataCell(Text(payment.borrowerName)),
@@ -401,7 +409,11 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
   ) async {
     final values = await showDialog<_PaymentValues>(
       context: context,
-      builder: (_) => _PaymentDialog(loans: activeLoans, methods: methods),
+      builder: (_) => _PaymentDialog(
+        loans: activeLoans,
+        methods: methods,
+        loadLoan: ref.read(loansControllerProvider.notifier).fetchDetail,
+      ),
     );
     if (values == null) return;
     final loan = activeLoans.firstWhere((item) => item.id == values.loanId);
@@ -412,6 +424,7 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
       receivedAt: values.receivedAt,
       method: values.method,
       reference: values.reference,
+      lateReason: values.lateReason,
     );
     if (!mounted) return;
     if (paymentId != null) {
@@ -475,26 +488,12 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
         OperationsConfig.defaults.paymentMethods;
     final values = await PaymentEditDialog.show(context, payment, methods);
     if (values == null || !mounted) return;
-    final payments = ref.read(paymentsControllerProvider.notifier);
-    final id = await payments.correctDetails(
-      payment,
-      receivedAt: values.receivedAt,
-      method: values.method,
-      reference: values.reference,
-      reason: values.reason,
+    await applyPaymentEdit(
+      payments: ref.read(paymentsControllerProvider.notifier),
+      undo: _undo,
+      payment: payment,
+      values: values,
     );
-    if (!mounted) return;
-    if (id != null) {
-      _undo.offer(
-        'Payment details updated. The change is in the history.',
-        () => payments.undoCorrection(id),
-      );
-    } else {
-      _undo.record(
-        'Payment could not be updated: '
-        '${payments.lastCorrectionError ?? 'try again.'}',
-      );
-    }
   }
 
   Future<void> _verify(PaymentSummary payment) async {
@@ -597,6 +596,11 @@ class _PaymentCard extends StatelessWidget {
           Text(
             '${payment.method} · ${payment.reference.isEmpty ? 'No reference' : payment.reference}',
           ),
+          if (payment.lateReason?.isNotEmpty ?? false)
+            Text(
+              'Late: ${payment.lateReason}',
+              style: TextStyle(color: Theme.of(context).colorScheme.tertiary),
+            ),
           const SizedBox(height: 8),
           Text(
             formatPeso(payment.amountCentavos),
@@ -647,16 +651,25 @@ class _PaymentValues {
     required this.receivedAt,
     required this.method,
     required this.reference,
+    this.lateReason,
   });
   final String loanId, method, reference;
   final int amountCentavos;
   final DateTime receivedAt;
+  final String? lateReason;
 }
 
 class _PaymentDialog extends StatefulWidget {
-  const _PaymentDialog({required this.loans, required this.methods});
+  const _PaymentDialog({
+    required this.loans,
+    required this.methods,
+    required this.loadLoan,
+  });
   final List<LoanSummary> loans;
   final List<String> methods;
+
+  /// Loads the loan's schedule, to tell whether the payment is late.
+  final Future<LoanDetail> Function(String loanId) loadLoan;
 
   @override
   State<_PaymentDialog> createState() => _PaymentDialogState();
@@ -666,14 +679,38 @@ class _PaymentDialogState extends State<_PaymentDialog> {
   final key = GlobalKey<FormState>();
   final amount = TextEditingController();
   final reference = TextEditingController();
+  final lateReason = TextEditingController();
   late String loanId = widget.loans.first.id;
   late String method = widget.methods.first;
   DateTime receivedAt = DateTime.now();
+  final Map<String, LoanDetail> _details = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadDetail(loanId);
+  }
+
+  Future<void> _loadDetail(String id) async {
+    if (_details.containsKey(id)) return;
+    try {
+      final detail = await widget.loadLoan(id);
+      if (mounted) setState(() => _details[id] = detail);
+    } catch (_) {
+      // Without the schedule the late check is skipped; recording still works.
+    }
+  }
+
+  ({int days, DateTime due})? get _late {
+    final detail = _details[loanId];
+    return detail == null ? null : lateness(detail, receivedAt);
+  }
 
   @override
   void dispose() {
     amount.dispose();
     reference.dispose();
+    lateReason.dispose();
     super.dispose();
   }
 
@@ -697,7 +734,10 @@ class _PaymentDialogState extends State<_PaymentDialog> {
                       child: Text(loan.borrowerName),
                     ),
                 ],
-                onChanged: (value) => setState(() => loanId = value!),
+                onChanged: (value) {
+                  setState(() => loanId = value!);
+                  _loadDetail(value!);
+                },
               ),
               const SizedBox(height: 12),
               TextFormField(
@@ -736,6 +776,20 @@ class _PaymentDialogState extends State<_PaymentDialog> {
                 value: receivedAt,
                 onChanged: (value) => setState(() => receivedAt = value),
               ),
+              if (_late case final late?) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'This payment is ${late.days} day${late.days == 1 ? '' : 's'} '
+                  'after the due date (${formatPhilippineDate(late.due)}).',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.tertiary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                LateReasonField(controller: lateReason),
+                const SizedBox(height: 12),
+              ],
               const Text(
                 'This payment will remain Pending Verification and will not reduce the balance yet.',
               ),
@@ -760,6 +814,7 @@ class _PaymentDialogState extends State<_PaymentDialog> {
               receivedAt: receivedAt,
               method: method,
               reference: reference.text.trim(),
+              lateReason: _late == null ? null : lateReason.text.trim(),
             ),
           );
         },

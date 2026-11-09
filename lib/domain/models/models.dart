@@ -288,12 +288,16 @@ class PaymentSummary {
     required this.reference,
     required this.status,
     this.unappliedCentavos = 0,
+    this.lateReason,
   });
 
   final String id, loanId, borrowerName, method, reference, status;
   final int amountCentavos;
   final int unappliedCentavos;
   final DateTime receivedAt;
+
+  /// Why the payment came after its due date, when one was given.
+  final String? lateReason;
 }
 
 class AuditEventSummary {

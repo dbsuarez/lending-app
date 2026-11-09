@@ -76,6 +76,12 @@ class SupabaseDocumentsRepository {
     ];
   }
 
+  /// Changes which category an uploaded file is filed under.
+  Future<void> setType(String documentId, String type) => _client.rpc(
+    'set_loan_document_type',
+    params: {'p_document_id': documentId, 'p_document_type': type},
+  );
+
   /// The file itself, for showing it inside the app.
   Future<Uint8List> download(String storagePath) =>
       _client.storage.from('loan-evidence').download(storagePath);

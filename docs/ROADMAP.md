@@ -1,6 +1,6 @@
 # Lending Manager Roadmap
 
-Last updated: 2026-11-07
+Last updated: 2026-11-09
 
 This is the implementation progress tracker. The authoritative product and
 business requirements remain in `LENDING_MANAGER_SPEC.md`; visual requirements
@@ -8,10 +8,11 @@ remain in `LENDING_MANAGER_UI_DESIGN.md`.
 
 ## Current status
 
-**Active milestone:** Phase 3 — Payments and synchronization  
-**Next deliverable:** Remaining committed PDF documents and a complete mobile-screen audit  
-**Production readiness:** Web is live, but the current local feature batch is not yet
-deployed. Remaining PDF artifacts, final legal review, and full phone acceptance remain open.
+**Active milestone:** Phase 4 — Collections and documents
+**Next deliverable:** Payment receipts, statement of account, loan agreement and
+acknowledgment-of-release PDFs; drafts of the legal documents for review
+**Production readiness:** Web and Android are live and current (2026-11-09).
+Open: the remaining PDFs, legal review, and turning on the weekly backup task.
 
 ## Phase progress
 
@@ -19,10 +20,10 @@ deployed. Remaining PDF artifacts, final legal review, and full phone acceptance
 |---|---|---|
 | Phase 0 — Specification and compliance | In progress | Core specification, UI contract, database standards, UI standards, mockup, and PDF reference are present. Several business/legal decisions remain open. |
 | Phase 1 — Foundation | Complete | Flutter web/Android structure, FVM, responsive shell, reusable themes, Supabase Auth, PostgreSQL schema, RLS, migrations, owner bootstrap, and encrypted Android outbox are implemented. |
-| Phase 2 — Lending core | In progress | Core lending, disbursement, cancellation, early payoff, private evidence, idempotency, and audit events are implemented. Active-loan amendments and refinancing remain. |
-| Phase 3 — Payments and sync | In progress | Pending/rejected/verified/reversed states, atomic oldest-due allocation, partial payments, unapplied credit, cash auto-verification, encrypted collection outbox, retry, and borrower conflict detection are implemented. Committed PDF receipts remain. |
-| Phase 4 — Collections and documents | In progress | Contractual queues, promises, contact logs, reminders, summary reports, authoritative aging, CSV export, customer status links, evidence, and A4 schedules are implemented. Additional PDFs remain. |
-| Phase 5 — Production readiness | In progress | Responsive golden matrix, analyzer/tests, production schema checks, live smoke writes, backup validation, configurable branding, staff provisioning, release APK, emulator acceptance, and Firebase web deployment are complete. Legal review remains. |
+| Phase 2 — Lending core | Complete | Core lending, disbursement, cancellation, early payoff (dated, undoable), amendments, refinancing, draft editing, loan and money-release corrections with undo, private evidence, idempotency, and audit events are implemented. Correcting the terms of a loan that already has payments remains (see Next). |
+| Phase 3 — Payments and sync | In progress | Pending/rejected/verified/reversed states, atomic oldest-due allocation, partial payments, unapplied credit, cash auto-verification, chosen payment date, payment-detail corrections with undo, late-payment reasons, encrypted collection outbox, retry, and borrower conflict detection are implemented. PDF receipts remain. |
+| Phase 4 — Collections and documents | In progress | Contractual queues, promises, contact logs, reminders, summary reports, authoritative aging, CSV export, customer status links, categorized evidence with in-app viewing, and A4 schedules and ledgers are implemented. Receipt, statement, agreement and acknowledgment PDFs remain. |
+| Phase 5 — Production readiness | In progress | Responsive golden matrix, analyzer/tests, production schema checks, live smoke writes, full backup with checksums and restore drill, per-loan restore, configurable branding, staff provisioning, release APK, Firebase web deployment, stale-cache protection and update prompt are complete. Legal review and enabling the weekly backup task remain. |
 
 ## Completed foundation
 
@@ -91,6 +92,13 @@ deployed. Remaining PDF artifacts, final legal review, and full phone acceptance
 - [x] Early payoff with future unearned interest waived
 - [x] Overpayment carried as unapplied credit without automatic refund
 - [x] Refinancing workflow with linked replacement draft and original-loan history
+- [x] Edit Draft: reopen the create steps prefilled, Before/After review
+- [x] Correct Loan: released loans without payments, reason required, undo
+- [x] Edit Money Release: date, method, reference, reason required, undo
+- [x] Early payoff with a chosen payoff date; Undo Early Payoff (shown only when one exists)
+- [x] Loan header: actions wrap on their own row; copy button for the loan number
+- [x] Every loan/payment change refreshes Ongoing tags, Collections, Dashboard and aging
+- [ ] Correct Terms for loans with payments (re-apply payments, with preview)
 
 ## Payments and synchronization
 
@@ -102,6 +110,9 @@ deployed. Remaining PDF artifacts, final legal review, and full phone acceptance
 - [x] Partial payment allocation
 - [x] Duplicate-payment protection through organization-scoped operation IDs
 - [x] Reversal/correction workflow with reasons and audit history
+- [x] Record payments with a chosen received date
+- [x] Edit payment date, method and reference (reason required, undo, history)
+- [x] Reason for late payment: prompted when a payment is after its due date, quick picks, editable later, shown in payment lists
 - [ ] Receipt generation based on committed payment status
 - [x] Encrypted Drift/SQLCipher Android outbox database
 - [x] Idempotent offline collection-activity queue and explicit retry
@@ -120,7 +131,17 @@ deployed. Remaining PDF artifacts, final legal review, and full phone acceptance
 - [x] Cross-platform loan and payment CSV export
 - [x] A4 loan schedule based on `Maricar_Origino_Loan_Schedule.pdf`
 - [x] Documents hub for per-loan schedule generation
-- [ ] Receipt, statement, agreement, and acknowledgment PDFs
+- [x] A4 payment ledger
+- [x] Evidence on the loan page: categories (release proof, payment proof, late-payment reason / promise, agreement, acknowledgment, other), thumbnails, in-app photo and PDF viewer, change category
+- [x] Paperclip evidence count in the Loans list, Documents page and loan Documents tab
+- [x] Exports open the system "Save to" picker on Android
+- [ ] Payment receipt PDF
+- [ ] Statement of account PDF
+- [ ] Loan agreement PDF (wording pending legal review)
+- [ ] Acknowledgment of money release PDF
+- [ ] Bulk printing of statements
+- [ ] Edit collection notes and promises after saving
+- [ ] Readable (PDF/CSV) borrower data export
 
 ## Customer read-only access
 
@@ -148,14 +169,22 @@ deployed. Remaining PDF artifacts, final legal review, and full phone acceptance
 - [x] Full backup v2: every table paged, checksums, uploaded files, balances (docs/BACKUP_AND_RESTORE.md)
 - [x] Weekly automatic backup with restore drill on this PC, second copy on another disk
 - [x] Verified restore into a new project (counts, every row, balances; refuses production)
+- [x] Restore one loan from a backup (owner): preview, reason, undo; can remove a loan made after the backup
+- [ ] Turn on the weekly backup task on the office PC (`tool/backup/schedule_weekly.ps1`); optional off-site copy
 - [x] Audit-event viewer
+- [x] Long-press any list filter to make it the default (works on Android)
+- [x] Hide/resize table columns, remembered per table
+- [ ] Phone cards follow hidden table columns
 
 ## Verification evidence
 
 - [x] `fvm flutter analyze` — no issues
-- [x] `fvm flutter test` — 15 tests passing
+- [x] `fvm flutter test` — 65 tests passing
+- [x] Database tests on a local Postgres copy (`tool/backup/*.mjs`): backup/restore 17, per-loan restore 20, late reason and evidence categories 11
+- [x] Real-data restore rehearsal from production backups
+- [x] All 105 icons in use verified to draw from the deployed font
 - [x] Production web release build succeeds
-- [x] Production migration history matches local migrations through `202611070032`
+- [x] Production migration history matches local migrations through `202611090038`
 - [x] Remote Supabase schema lint reports no errors
 - [x] Maricar-style A4 schedule rendered and visually inspected
 - [x] Live production borrower write verified with an archived smoke record
@@ -180,9 +209,14 @@ deployed. Remaining PDF artifacts, final legal review, and full phone acceptance
 - [x] Weekly encrypted backup and owner recovery responsibility
 - [ ] Legal review of agreements, rates, penalties, and collection practices
 
-## Remaining implementation order
+## Next, in order
 
-1. Perform a full responsive audit of every phone screen before building or installing another APK.
-2. Add committed receipts, statements, agreements, and acknowledgments when the PDF artifact runtime is available.
-3. Complete legal review.
-4. When explicitly requested, build and deploy the current local web feature batch with its build identifier.
+1. Payment receipt, statement of account, loan agreement and acknowledgment-of-release PDFs.
+2. Drafts of the legal documents (agreement, disclosure statement, privacy notice, collection and penalty policy) for the lawyer.
+3. Legal review; then finalize the agreement wording in the PDF.
+4. Correct Terms for loans that already have payments.
+5. Edit collection notes and promises; phone cards follow hidden columns; bulk statements; readable borrower export.
+6. Owner: turn on the weekly backup task.
+
+Rules for this work: [WEB_ICONS_AND_CACHING.md](WEB_ICONS_AND_CACHING.md),
+[BACKUP_AND_RESTORE.md](BACKUP_AND_RESTORE.md), [DEPLOYMENT.md](DEPLOYMENT.md).

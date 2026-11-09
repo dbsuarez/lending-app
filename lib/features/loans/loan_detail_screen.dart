@@ -1542,32 +1542,15 @@ class _LoanPaymentsState extends ConsumerState<_LoanPayments> {
         OperationsConfig.defaults.paymentMethods;
     final values = await PaymentEditDialog.show(context, payment, methods);
     if (values == null || !mounted) return;
-    final controller = ref.read(paymentsControllerProvider.notifier);
-    final undo = ref.read(undoControllerProvider.notifier);
-    final id = await controller.correctDetails(
-      payment,
-      receivedAt: values.receivedAt,
-      method: values.method,
-      reference: values.reference,
-      reason: values.reason,
-    );
-    if (!mounted) return;
-    if (id == null) {
-      undo.record(
-        'Payment could not be updated: '
-        '${controller.lastCorrectionError ?? 'try again.'}',
-      );
-      return;
-    }
-    undo.offer(
-      'Payment details updated. The change is in the history.',
-      () async {
-        final undone = await controller.undoCorrection(id);
-        if (undone) _reload();
-        return undone;
+    await applyPaymentEdit(
+      payments: ref.read(paymentsControllerProvider.notifier),
+      undo: ref.read(undoControllerProvider.notifier),
+      payment: payment,
+      values: values,
+      onChanged: () {
+        if (mounted) _reload();
       },
     );
-    _reload();
   }
 
   @override
@@ -1599,7 +1582,8 @@ class _LoanPaymentsState extends ConsumerState<_LoanPayments> {
               leading: const Icon(Icons.payments_outlined),
               title: Text(formatPeso(item.amountCentavos)),
               subtitle: Text(
-                '${formatPhilippineDateTime(item.receivedAt)} · ${item.method}${item.reference.isEmpty ? '' : ' · ${item.reference}'}',
+                '${formatPhilippineDateTime(item.receivedAt)} · ${item.method}${item.reference.isEmpty ? '' : ' · ${item.reference}'}'
+                '${(item.lateReason?.isNotEmpty ?? false) ? '\nLate: ${item.lateReason}' : ''}',
               ),
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -1607,7 +1591,7 @@ class _LoanPaymentsState extends ConsumerState<_LoanPayments> {
                   AppStatusBadge(item.status),
                   if (editable)
                     IconButton(
-                      tooltip: 'Edit date, method or reference',
+                      tooltip: 'Edit date, method, reference or late reason',
                       onPressed: () => _edit(item),
                       icon: const Icon(Icons.edit_outlined),
                     ),
