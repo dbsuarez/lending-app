@@ -342,7 +342,7 @@ class LoanDocumentsPdf {
         'Repayment',
         'The Borrower will repay ${LoanSchedulePdf._money(s.totalCentavos - charged)} in '
             '$n installment${n == 1 ? '' : 's'} on the dates in the schedule '
-            'below${first == null ? '' : ', from ${formatPhilippineDate(first)} to ${formatPhilippineDate(last!)}'}. '
+            'on page 1${first == null ? '' : ', from ${formatPhilippineDate(first)} to ${formatPhilippineDate(last!)}'}. '
             'Payments may be made in cash or by transfer to the Lender\'s '
             'accounts; the Borrower will send the transaction reference.',
       ),
@@ -445,25 +445,7 @@ class LoanDocumentsPdf {
             ),
           ]),
           pw.SizedBox(height: 12),
-          _sectionTitle('TERMS'),
-          pw.SizedBox(height: 6),
-          for (var i = 0; i < clauses.length; i++)
-            pw.Padding(
-              padding: const pw.EdgeInsets.only(bottom: 6),
-              child: pw.RichText(
-                text: pw.TextSpan(
-                  style: const pw.TextStyle(fontSize: 9.5, lineSpacing: 2),
-                  children: [
-                    pw.TextSpan(
-                      text: '${i + 1}. ${clauses[i].$1}. ',
-                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-                    ),
-                    pw.TextSpan(text: clauses[i].$2),
-                  ],
-                ),
-              ),
-            ),
-          pw.SizedBox(height: 10),
+          pw.SizedBox(height: 12),
           _sectionTitle('REPAYMENT SCHEDULE'),
           pw.SizedBox(height: 6),
           LoanSchedulePdf._scheduleTable(
@@ -482,6 +464,27 @@ class LoanDocumentsPdf {
             LoanSchedulePdf._paleBlue,
             LoanSchedulePdf._border,
           ),
+          // Page 1: parties, disclosure, schedule. Page 2: terms, signatures.
+          pw.NewPage(),
+          pw.SizedBox(height: 12),
+          _sectionTitle('TERMS'),
+          pw.SizedBox(height: 6),
+          for (var i = 0; i < clauses.length; i++)
+            pw.Padding(
+              padding: const pw.EdgeInsets.only(bottom: 6),
+              child: pw.RichText(
+                text: pw.TextSpan(
+                  style: const pw.TextStyle(fontSize: 9.5, lineSpacing: 2),
+                  children: [
+                    pw.TextSpan(
+                      text: '${i + 1}. ${clauses[i].$1}. ',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                    ),
+                    pw.TextSpan(text: clauses[i].$2),
+                  ],
+                ),
+              ),
+            ),
           pw.SizedBox(height: 18),
           pw.Text(
             'Signed on ____________________ at ____________________.',
