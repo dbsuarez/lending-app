@@ -407,6 +407,8 @@ class _InviteStaffDialogState extends State<_InviteStaffDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
+    // Scrolls so fields never hide under the buttons (phones, keyboard).
+    scrollable: true,
     title: const WindowTitle(Text('Invite staff member')),
     content: SizedBox(
       width: 460,
@@ -494,6 +496,8 @@ class _OperationsDialogState extends State<_OperationsDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
+    // Scrolls so fields never hide under the buttons (phones, keyboard).
+    scrollable: true,
     title: const WindowTitle(Text('Operational presets')),
     content: SizedBox(
       width: 560,
@@ -653,6 +657,8 @@ class _BusinessProfileDialogState
 
   @override
   Widget build(BuildContext context) => AlertDialog(
+    // Scrolls so fields never hide under the buttons (phones, keyboard).
+    scrollable: true,
     title: const WindowTitle(Text('Business profile')),
     content: SizedBox(
       width: 520,

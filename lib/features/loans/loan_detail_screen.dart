@@ -632,6 +632,8 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
     final reason = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
+        // Scrolls so fields never hide under the buttons (phones, keyboard).
+        scrollable: true,
         title: const TitleWithInfo('Cancel draft loan?', 'cancel_draft'),
         content: TextField(
           controller: reasonController,
@@ -1844,6 +1846,8 @@ class _AmendmentDialogState extends State<_AmendmentDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
+    // Scrolls so fields never hide under the buttons (phones, keyboard).
+    scrollable: true,
     title: const TitleWithInfo('Change a due date', 'amend_due_date'),
     content: SizedBox(
       width: 480,
@@ -2142,6 +2146,8 @@ class _DisbursementDialogState extends State<_DisbursementDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
+    // Scrolls so fields never hide under the buttons (phones, keyboard).
+    scrollable: true,
     title: editing
         ? const TitleWithInfo('Edit money release', 'edit_release')
         : const TitleWithInfo('Confirm and disburse loan', 'disburse'),
@@ -2289,91 +2295,94 @@ class _EarlyPayoffDialogState extends State<_EarlyPayoffDialog> {
   @override
   Widget build(BuildContext context) => AlertDialog(
     title: const TitleWithInfo('Record early payoff', 'early_payoff'),
+    // Scrolls so the fields at the bottom never slide under the buttons.
     content: SizedBox(
       width: 500,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          ListTile(
-            leading: const Icon(Icons.event),
-            title: const Text('Paid off on'),
-            trailing: loading
-                ? const SizedBox.square(
-                    dimension: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Text(formatPhilippineDate(quote.payoffDate)),
-            onTap: loading ? null : _pickDate,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Interest to charge',
-            style: Theme.of(context).textTheme.labelLarge,
-          ),
-          RadioGroup<PayoffRule>(
-            groupValue: rule,
-            onChanged: (value) {
-              if (value != null) setState(() => rule = value);
-            },
-            child: Column(
-              children: [
-                for (final r in PayoffRule.values)
-                  RadioListTile<PayoffRule>(
-                    value: r,
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(r.label),
-                    subtitle: Text(r.explanation),
-                    secondary: Text(
-                      formatPeso(quotes[r]!.payoffCentavos),
-                      style: const TextStyle(fontWeight: FontWeight.w700),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.event),
+              title: const Text('Paid off on'),
+              trailing: loading
+                  ? const SizedBox.square(
+                      dimension: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Text(formatPhilippineDate(quote.payoffDate)),
+              onTap: loading ? null : _pickDate,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Interest to charge',
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+            RadioGroup<PayoffRule>(
+              groupValue: rule,
+              onChanged: (value) {
+                if (value != null) setState(() => rule = value);
+              },
+              child: Column(
+                children: [
+                  for (final r in PayoffRule.values)
+                    RadioListTile<PayoffRule>(
+                      value: r,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(r.label),
+                      subtitle: Text(r.explanation),
+                      secondary: Text(
+                        formatPeso(quotes[r]!.payoffCentavos),
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
                     ),
-                  ),
+                ],
+              ),
+            ),
+            const Divider(),
+            ListTile(
+              title: const Text('Remaining principal'),
+              trailing: Text(formatPeso(quote.principalCentavos)),
+            ),
+            ListTile(
+              title: const Text('Interest charged'),
+              trailing: Text(formatPeso(quote.earnedInterestCentavos)),
+            ),
+            const Divider(),
+            ListTile(
+              title: const Text(
+                'Payoff amount',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              trailing: Text(
+                formatPeso(quote.payoffCentavos),
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
+            const Text(
+              'The rule you choose is recorded with the payoff. You can undo it '
+              'afterwards from the loan page.',
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: method,
+              decoration: const InputDecoration(labelText: 'Payment method'),
+              items: [
+                for (final item in widget.methods)
+                  DropdownMenuItem(value: item, child: Text(item)),
               ],
+              onChanged: (value) => setState(() => method = value!),
             ),
-          ),
-          const Divider(),
-          ListTile(
-            title: const Text('Remaining principal'),
-            trailing: Text(formatPeso(quote.principalCentavos)),
-          ),
-          ListTile(
-            title: const Text('Interest charged'),
-            trailing: Text(formatPeso(quote.earnedInterestCentavos)),
-          ),
-          const Divider(),
-          ListTile(
-            title: const Text(
-              'Payoff amount',
-              style: TextStyle(fontWeight: FontWeight.w700),
+            const SizedBox(height: 12),
+            TextField(
+              controller: reference,
+              decoration: const InputDecoration(
+                labelText: 'Reference (optional)',
+              ),
             ),
-            trailing: Text(
-              formatPeso(quote.payoffCentavos),
-              style: const TextStyle(fontWeight: FontWeight.w800),
-            ),
-          ),
-          const Text(
-            'The rule you choose is recorded with the payoff. You can undo it '
-            'afterwards from the loan page.',
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            initialValue: method,
-            decoration: const InputDecoration(labelText: 'Payment method'),
-            items: [
-              for (final item in widget.methods)
-                DropdownMenuItem(value: item, child: Text(item)),
-            ],
-            onChanged: (value) => setState(() => method = value!),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: reference,
-            decoration: const InputDecoration(
-              labelText: 'Reference (optional)',
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     ),
     actions: [

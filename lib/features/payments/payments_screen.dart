@@ -871,6 +871,8 @@ class _RejectPaymentDialogState extends State<_RejectPaymentDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
+    // Scrolls so fields never hide under the buttons (phones, keyboard).
+    scrollable: true,
     title: const TitleWithInfo('Reject payment?', 'reject'),
     content: Form(
       key: key,
@@ -918,6 +920,8 @@ class _ReasonDialogState extends State<_ReasonDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
+    // Scrolls so fields never hide under the buttons (phones, keyboard).
+    scrollable: true,
     title: Text(widget.title),
     content: Form(
       key: key,

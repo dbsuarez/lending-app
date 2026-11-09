@@ -78,6 +78,8 @@ class _ExportDialogState extends State<_ExportDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
+    // Scrolls so fields never hide under the buttons (phones, keyboard).
+    scrollable: true,
     title: WindowTitle(
       const Text('Back up everything'),
       onBack: running ? () {} : null,

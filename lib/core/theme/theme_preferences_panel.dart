@@ -121,6 +121,8 @@ class _CustomColorDialogState extends State<_CustomColorDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
+    // Scrolls so fields never hide under the buttons (phones, keyboard).
+    scrollable: true,
     title: const Text('Custom palette'),
     content: Column(
       mainAxisSize: MainAxisSize.min,

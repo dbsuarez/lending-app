@@ -453,6 +453,8 @@ class _AddPenaltyDialogState extends State<_AddPenaltyDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
+    // Scrolls so fields never hide under the buttons (phones, keyboard).
+    scrollable: true,
     title: const WindowTitle(Text('Add penalty')),
     content: SizedBox(
       width: 440,
@@ -536,6 +538,8 @@ Future<String?> _askText(
   return showDialog<String>(
     context: context,
     builder: (c) => AlertDialog(
+      // Scrolls so fields never hide under the buttons (phones, keyboard).
+      scrollable: true,
       title: WindowTitle(Text(title)),
       content: Form(
         key: key,
