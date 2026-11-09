@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/widgets/menu_label.dart';
 import '../penalties/penalty_widgets.dart';
 import '../documents/evidence_counts.dart';
 import '../documents/loan_evidence_section.dart';
@@ -241,7 +242,7 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
             MenuItemButton(
               leadingIcon: const Icon(Icons.manage_history_outlined),
               onPressed: () => _manageShareLinks(loan),
-              child: const Text('Manage links'),
+              child: const Text('Manage links…'),
             ),
           ],
           builder: (context, controller, _) => IconButton(
@@ -286,14 +287,14 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
               MenuItemButton(
                 leadingIcon: const Icon(Icons.event_repeat_outlined),
                 onPressed: () => _editRelease(loan),
-                child: const Text('Edit Money Release'),
+                child: const Text('Edit Money Release…'),
               ),
             ],
             builder: (context, controller, _) => OutlinedButton.icon(
               onPressed: () =>
                   controller.isOpen ? controller.close() : controller.open(),
               icon: const Icon(Icons.edit_outlined),
-              label: const Text('Correct'),
+              label: const MenuLabel('Correct'),
             ),
           ),
         if (loan.summary.status == 'active') ...[
@@ -305,7 +306,7 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
                 builder: (_) => ExtensionPreviewDialog(loan),
               ),
               icon: const Icon(Icons.request_quote_outlined),
-              label: const Text('Preview Extension'),
+              label: const Text('Preview Extension…'),
             ),
           ),
           _explained(
@@ -313,7 +314,7 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
             OutlinedButton.icon(
               onPressed: () => _amendDueDate(loan),
               icon: const Icon(Icons.edit_calendar_outlined),
-              label: const Text('Change Due Date'),
+              label: const Text('Change Due Date…'),
             ),
           ),
           _explained(
@@ -321,7 +322,7 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
             OutlinedButton.icon(
               onPressed: () => _refinance(loan),
               icon: const Icon(Icons.autorenew),
-              label: const Text('Refinance'),
+              label: const Text('Refinance…'),
             ),
           ),
           _explained(
@@ -329,7 +330,7 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
             OutlinedButton.icon(
               onPressed: () => _earlyPayoff(loan),
               icon: const Icon(Icons.savings_outlined),
-              label: const Text('Early Payoff'),
+              label: const Text('Early Payoff…'),
             ),
           ),
         ],
@@ -337,7 +338,7 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
           OutlinedButton.icon(
             onPressed: () => _undoPayoff(loan),
             icon: const Icon(Icons.undo),
-            label: const Text('Undo Early Payoff'),
+            label: const Text('Undo Early Payoff…'),
           ),
         if (loan.summary.status == 'draft') ...[
           _explained(
@@ -345,13 +346,13 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
             OutlinedButton.icon(
               onPressed: () => _cancelDraft(loan),
               icon: const Icon(Icons.cancel_outlined),
-              label: const Text('Cancel Draft'),
+              label: const Text('Cancel Draft…'),
             ),
           ),
           FilledButton.icon(
             onPressed: () => _activate(loan),
             icon: const Icon(Icons.verified_outlined),
-            label: const Text('Confirm & Disburse'),
+            label: const Text('Confirm & Disburse…'),
           ),
         ],
       ];
@@ -429,24 +430,28 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
         if (status == 'draft') ...[
           item(
             Icons.verified_outlined,
-            'Confirm & Disburse',
+            'Confirm & Disburse…',
             () => _activate(loan),
           ),
           item(Icons.edit_outlined, 'Edit Draft', () => _editLoan(loan)),
-          item(Icons.cancel_outlined, 'Cancel Draft', () => _cancelDraft(loan)),
+          item(
+            Icons.cancel_outlined,
+            'Cancel Draft…',
+            () => _cancelDraft(loan),
+          ),
         ],
         if (status == 'active')
           item(Icons.edit_note_outlined, 'Correct Loan', () => _editLoan(loan)),
         if (status == 'active' || status == 'fully_paid')
           item(
             Icons.event_repeat_outlined,
-            'Edit Money Release',
+            'Edit Money Release…',
             () => _editRelease(loan),
           ),
         if (status == 'active') ...[
           item(
             Icons.request_quote_outlined,
-            'Preview Extension',
+            'Preview Extension…',
             () => showDialog<void>(
               context: context,
               builder: (_) => ExtensionPreviewDialog(loan),
@@ -454,18 +459,18 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
           ),
           item(
             Icons.edit_calendar_outlined,
-            'Change Due Date',
+            'Change Due Date…',
             () => _amendDueDate(loan),
           ),
-          item(Icons.autorenew, 'Refinance', () => _refinance(loan)),
+          item(Icons.autorenew, 'Refinance…', () => _refinance(loan)),
           item(
             Icons.savings_outlined,
-            'Early Payoff',
+            'Early Payoff…',
             () => _earlyPayoff(loan),
           ),
         ],
         if (status == 'fully_paid' && _payoffPaymentId != null)
-          item(Icons.undo, 'Undo Early Payoff', () => _undoPayoff(loan)),
+          item(Icons.undo, 'Undo Early Payoff…', () => _undoPayoff(loan)),
         item(
           loan.summary.isPersonal
               ? Icons.business_center_outlined
@@ -475,7 +480,7 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
         ),
         item(
           Icons.chat_outlined,
-          'Explain payments',
+          'Explain payments…',
           () => LedgerExplanationDialog.show(context, loan),
         ),
         const Divider(height: 1),
@@ -488,8 +493,8 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
       builder: (context, controller, _) => FilledButton.tonalIcon(
         onPressed: () =>
             controller.isOpen ? controller.close() : controller.open(),
-        icon: const Icon(Icons.expand_more),
-        label: const Text('Actions'),
+        icon: const Icon(Icons.more_horiz),
+        label: const MenuLabel('Actions'),
       ),
     );
   }
@@ -1233,7 +1238,7 @@ class _PaymentLedger extends StatelessWidget {
               FilledButton.tonalIcon(
                 onPressed: () => LedgerExplanationDialog.show(context, loan),
                 icon: const Icon(Icons.chat_outlined, size: 18),
-                label: const Text('Explain'),
+                label: const Text('Explain…'),
               ),
             ],
           ),
@@ -1714,7 +1719,7 @@ class _LoanDocuments extends StatelessWidget {
               (c) => printLoanDocument(c, loan, LoanPrintDocument.schedule),
             ),
             icon: const Icon(Icons.print_outlined),
-            label: const Text('Print'),
+            label: const Text('Print…'),
           ),
         ),
       ),
@@ -1732,7 +1737,7 @@ class _LoanDocuments extends StatelessWidget {
               (c) => printLoanDocument(c, loan, LoanPrintDocument.ledger),
             ),
             icon: const Icon(Icons.print_outlined),
-            label: const Text('Print'),
+            label: const Text('Print…'),
           ),
         ),
       ),
@@ -1763,7 +1768,7 @@ class _LoanDocuments extends StatelessWidget {
                 (c) => printLoanDocument(c, loan, document),
               ),
               icon: const Icon(Icons.print_outlined),
-              label: const Text('Print'),
+              label: const Text('Print…'),
             ),
           ),
         ),

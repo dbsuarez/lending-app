@@ -35,7 +35,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull, reason: 'initial borrowers screen');
 
-    await tester.tap(find.text('Add borrower'));
+    await tester.tap(find.text('Add borrower…'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull, reason: 'borrower dialog');
     final fields = find.byType(TextFormField);

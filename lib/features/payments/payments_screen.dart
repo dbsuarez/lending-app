@@ -75,7 +75,7 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
                         ? null
                         : () => _record(activeLoans, methods),
                     icon: const Icon(Icons.add_card_outlined),
-                    label: const Text('Record Payment'),
+                    label: const Text('Record Payment…'),
                   ),
                 ],
               ),
@@ -333,7 +333,7 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
                       FilledButton.icon(
                         onPressed: () => _verifySelected(chosen),
                         icon: const Icon(Icons.done_all),
-                        label: const Text('Verify selected'),
+                        label: const Text('Verify selected…'),
                       ),
                     ],
                   ),
@@ -465,26 +465,26 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
       if (payment.status == 'pending') ...[
         TextButton(
           onPressed: () => _verify(payment),
-          child: const Text('Verify'),
+          child: const Text('Verify…'),
         ),
         TextButton(
           onPressed: () => _reject(payment),
-          child: const Text('Reject'),
+          child: const Text('Reject…'),
         ),
       ],
       if (payment.status == 'verified') ...[
         TextButton(
           onPressed: () =>
               printFromContext(context, (c) => printPaymentReceipt(c, payment)),
-          child: const Text('Receipt'),
+          child: const Text('Receipt…'),
         ),
         TextButton(
           onPressed: () => _reverse(payment),
-          child: const Text('Reverse'),
+          child: const Text('Reverse…'),
         ),
       ],
       if (payment.status == 'pending' || payment.status == 'verified')
-        TextButton(onPressed: () => _edit(payment), child: const Text('Edit')),
+        TextButton(onPressed: () => _edit(payment), child: const Text('Edit…')),
     ],
   );
 
@@ -625,9 +625,9 @@ class _PaymentCard extends StatelessWidget {
               alignment: Alignment.centerRight,
               child: Wrap(
                 children: [
-                  TextButton(onPressed: onEdit, child: const Text('Edit')),
-                  TextButton(onPressed: onVerify, child: const Text('Verify')),
-                  TextButton(onPressed: onReject, child: const Text('Reject')),
+                  TextButton(onPressed: onEdit, child: const Text('Edit…')),
+                  TextButton(onPressed: onVerify, child: const Text('Verify…')),
+                  TextButton(onPressed: onReject, child: const Text('Reject…')),
                 ],
               ),
             ),
@@ -637,7 +637,7 @@ class _PaymentCard extends StatelessWidget {
               alignment: Alignment.centerRight,
               child: Wrap(
                 children: [
-                  TextButton(onPressed: onEdit, child: const Text('Edit')),
+                  TextButton(onPressed: onEdit, child: const Text('Edit…')),
                   TextButton(
                     onPressed: onReverse,
                     child: const Text('Reverse Payment'),

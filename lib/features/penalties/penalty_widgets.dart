@@ -383,7 +383,7 @@ class _LoanPenaltiesCardState extends ConsumerState<LoanPenaltiesCard> {
                       OutlinedButton.icon(
                         onPressed: _add,
                         icon: const Icon(Icons.add),
-                        label: const Text('Add penalty'),
+                        label: const Text('Add penalty…'),
                       ),
                   ],
                 ),
@@ -418,7 +418,7 @@ class _LoanPenaltiesCardState extends ConsumerState<LoanPenaltiesCard> {
                           ? null
                           : TextButton(
                               onPressed: () => _waive(c),
-                              child: const Text('Waive'),
+                              child: const Text('Waive…'),
                             ),
                     ),
                 ],

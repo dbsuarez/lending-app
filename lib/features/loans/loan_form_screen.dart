@@ -521,7 +521,7 @@ class _LoanFormScreenState extends ConsumerState<LoanFormScreen> {
                     );
                     if (next != null) setState(() => penalty = next);
                   },
-                  child: const Text('Change'),
+                  child: const Text('Change…'),
                 ),
         ),
       ],

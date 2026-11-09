@@ -154,7 +154,7 @@ class _DocumentsScreenState extends ConsumerState<DocumentsScreen> {
                                     onPressed: () =>
                                         _manageEvidence(context, loan),
                                     icon: const Icon(Icons.attach_file),
-                                    label: const Text('Evidence'),
+                                    label: const Text('Evidence…'),
                                   ),
                                   LoanPrintMenu(
                                     filled: true,
@@ -243,9 +243,9 @@ class _DocumentLoanCard extends StatelessWidget {
             ? onEvidence()
             : onPrint(LoanPrintDocument.values.byName(value)),
         itemBuilder: (_) => [
-          const PopupMenuItem(value: 'evidence', child: Text('Evidence')),
+          const PopupMenuItem(value: 'evidence', child: Text('Evidence…')),
           for (final d in LoanPrintDocument.values)
-            PopupMenuItem(value: d.name, child: Text('Print ${d.label}')),
+            PopupMenuItem(value: d.name, child: Text('Print ${d.label}…')),
         ],
       ),
     ),

@@ -202,3 +202,16 @@
 - **Session expiration handling:** Renew sessions securely where appropriate. When reauthentication is required, explain the situation and preserve safe, non-sensitive work if feasible. Never expose credentials or tokens in UI messages or browser storage unnecessarily.
 - **Centralized design tokens:** Define typography, colors, spacing, border radii, density, component sizing, and breakpoints in the MUI theme. Avoid scattered hardcoded styling values. Keep the established 8px spacing scale.
 - **Centralized UI text:** Keep repeated labels, validation messages, and notifications in shared resources/constants to maintain consistent wording and enable later localization. Avoid unnecessary abstraction for one-off text.
+
+## Button labels: menus and windows
+
+Users must be able to tell what a button does before pressing it:
+
+- **Opens a menu** of choices: label followed by ▾ (`MenuLabel` in
+  `lib/core/widgets/menu_label.dart`). Example: "Correct ▾", "Actions ▾", "Print ▾".
+- **Opens a window** to fill in or confirm (a dialog, the print window): label
+  ends with "…". Example: "Early Payoff…", "Edit…", "Receipt…", "Waive…".
+- **Acts at once or goes to another page**: no mark. Example: "Edit Draft",
+  "Mark Personal", "Copy".
+- Buttons inside a window that finish it (Save, Confirm, Record Payment) take
+  no mark. Settings rows that open a window show a › chevron on the right.

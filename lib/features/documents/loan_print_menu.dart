@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdf/pdf.dart' show PdfPageFormat;
 import 'package:printing/printing.dart';
 
+import '../../core/widgets/menu_label.dart';
 import '../../core/undo/undo_controller.dart';
 import '../../domain/models/models.dart';
 import '../borrowers/borrowers_controller.dart';
@@ -172,7 +173,7 @@ class LoanPrintMenu extends StatelessWidget {
         MenuItemButton(
           leadingIcon: Icon(document.icon),
           onPressed: () => _print(context, document),
-          child: Text(document.label),
+          child: Text('${document.label}…'),
         ),
     ],
     builder: (context, controller, _) {
@@ -182,7 +183,7 @@ class LoanPrintMenu extends StatelessWidget {
           ? FilledButton.icon(
               onPressed: toggle,
               icon: const Icon(Icons.print_outlined),
-              label: Text(label),
+              label: MenuLabel(label),
             )
           : IconButton(
               tooltip: 'Print or save PDF',

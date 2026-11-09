@@ -348,7 +348,7 @@ class _StaffRolesDialogState extends State<_StaffRolesDialog> {
         FilledButton.icon(
           onPressed: _invite,
           icon: const Icon(Icons.person_add_alt_1_outlined),
-          label: const Text('Invite Staff'),
+          label: const Text('Invite Staff…'),
         ),
       TextButton(
         onPressed: () => Navigator.pop(context),

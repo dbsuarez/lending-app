@@ -54,7 +54,7 @@ class CollectionsScreen extends ConsumerWidget {
                   OutlinedButton.icon(
                     onPressed: () => _showTemplates(context),
                     icon: const Icon(Icons.mark_email_read_outlined),
-                    label: const Text('Reminder Templates'),
+                    label: const Text('Reminder Templates…'),
                   ),
                   const SizedBox(width: 8),
                   IconButton(

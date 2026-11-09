@@ -9,6 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'evidence_counts.dart';
+import '../../core/widgets/menu_label.dart';
 import '../../core/config/app_config.dart';
 import '../../core/export_file.dart';
 import '../../core/formatting.dart';
@@ -171,7 +172,7 @@ class _LoanEvidenceSectionState extends ConsumerState<LoanEvidenceSection> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.upload_file),
-              label: const Text('Upload'),
+              label: const MenuLabel('Upload'),
             ),
           ),
       ],

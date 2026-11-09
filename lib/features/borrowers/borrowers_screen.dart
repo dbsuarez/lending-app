@@ -70,7 +70,7 @@ class _BorrowersScreenState extends ConsumerState<BorrowersScreen> {
                         ? null
                         : () => _edit(context),
                     icon: const Icon(Icons.person_add_outlined),
-                    label: const Text('Add borrower'),
+                    label: const Text('Add borrower…'),
                   ),
                 ],
               ),
@@ -238,11 +238,11 @@ class _BorrowersScreenState extends ConsumerState<BorrowersScreen> {
                                     ),
                                     TextButton(
                                       onPressed: () => _edit(context, borrower),
-                                      child: const Text('Edit'),
+                                      child: const Text('Edit…'),
                                     ),
                                     TextButton(
                                       onPressed: () => _archive(borrower),
-                                      child: const Text('Archive'),
+                                      child: const Text('Archive…'),
                                     ),
                                   ],
                                 ),
