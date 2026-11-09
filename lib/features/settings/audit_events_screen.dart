@@ -1,3 +1,4 @@
+import 'package:go_router/go_router.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/widgets/table_columns.dart';
@@ -39,6 +40,12 @@ class _AuditEventsScreenState extends State<AuditEventsScreen> {
       children: [
         Row(
           children: [
+            IconButton(
+              tooltip: 'Back to Settings',
+              onPressed: () => context.go('/settings'),
+              icon: const Icon(Icons.arrow_back),
+            ),
+            const SizedBox(width: 8),
             Expanded(
               child: Text(
                 'Audit History',

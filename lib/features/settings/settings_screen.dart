@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'backup_dialogs.dart';
 import 'loan_restore.dart';
+import '../../core/widgets/window_title.dart';
 import '../../core/undo/undo_controller.dart';
 import '../../core/security/app_lock.dart';
 import '../../core/config/app_config.dart';
@@ -240,7 +241,7 @@ class _StaffRolesDialogState extends State<_StaffRolesDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Staff roles'),
+    title: const WindowTitle(Text('Staff roles')),
     content: SizedBox(
       width: 620,
       child: loading
@@ -369,7 +370,7 @@ class _InviteStaffDialogState extends State<_InviteStaffDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Invite staff member'),
+    title: const WindowTitle(Text('Invite staff member')),
     content: SizedBox(
       width: 460,
       child: Form(
@@ -456,7 +457,7 @@ class _OperationsDialogState extends State<_OperationsDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Operational presets'),
+    title: const WindowTitle(Text('Operational presets')),
     content: SizedBox(
       width: 560,
       child: Column(
@@ -615,7 +616,7 @@ class _BusinessProfileDialogState
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Business profile'),
+    title: const WindowTitle(Text('Business profile')),
     content: SizedBox(
       width: 520,
       child: loading

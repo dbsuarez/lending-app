@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../core/widgets/window_title.dart';
 import '../../app/data_refresh.dart';
 import '../../core/formatting.dart';
 import '../../core/undo/undo_controller.dart';
@@ -29,7 +30,7 @@ Future<void> restoreLoanFromBackup(BuildContext context) async {
     await showDialog<void>(
       context: context,
       builder: (c) => AlertDialog(
-        title: const Text('This backup cannot be used'),
+        title: const WindowTitle(Text('This backup cannot be used')),
         content: Text(check.problems.take(10).map((p) => '• $p').join('\n')),
         actions: [
           TextButton(
@@ -172,7 +173,7 @@ class _PickLoanDialogState extends State<_PickLoanDialog> {
     final all = entries;
     final shown = all?.where((e) => showAll || e.kind != _Kind.same).toList();
     return AlertDialog(
-      title: const Text('Restore a loan'),
+      title: const WindowTitle(Text('Restore a loan')),
       content: SizedBox(
         width: 620,
         height: 480,
@@ -330,7 +331,10 @@ class _PreviewDialogState extends State<_PreviewDialog> {
     final lines = loaded && error == null ? _changes(now, after) : <String>[];
     final owedNow = _owed(now), owedAfter = _owed(after);
     return AlertDialog(
-      title: Text('Restore ${_ref(widget.entry.loanId)}?'),
+      title: WindowTitle(
+        Text('Restore ${_ref(widget.entry.loanId)}?'),
+        onBack: saving ? () {} : null,
+      ),
       content: SizedBox(
         width: 560,
         child: !loaded

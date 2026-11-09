@@ -5,6 +5,7 @@ import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../core/widgets/window_title.dart';
 import '../../core/export_file.dart';
 import '../../core/formatting.dart';
 import '../../core/undo/undo_controller.dart';
@@ -77,7 +78,10 @@ class _ExportDialogState extends State<_ExportDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Back up everything'),
+    title: WindowTitle(
+      const Text('Back up everything'),
+      onBack: running ? () {} : null,
+    ),
     content: SizedBox(
       width: 460,
       child: Column(
@@ -200,12 +204,14 @@ class _CheckDialogState extends State<_CheckDialog> {
       ),
     );
     return AlertDialog(
-      title: Text(
-        c == null
-            ? 'Checking backup…'
-            : c.ok
-            ? 'Backup is good'
-            : 'Backup has problems',
+      title: WindowTitle(
+        Text(
+          c == null
+              ? 'Checking backup…'
+              : c.ok
+              ? 'Backup is good'
+              : 'Backup has problems',
+        ),
       ),
       content: SizedBox(
         width: 520,
