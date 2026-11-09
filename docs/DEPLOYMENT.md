@@ -77,14 +77,17 @@ firebase deploy --only hosting --project lending-manager-suarez
 Firebase rewrites all routes to `index.html`, allowing direct navigation to
 Flutter routes such as `/login` and `/s/<customer-token>`.
 
-Flutter web assets are not content-hashed (for example the icon font
-`assets/fonts/MaterialIcons-Regular.otf` keeps its name but is trimmed to the
-icons each build uses), so `assets/`, `canvaskit/` and `icons/` are served
-with `no-cache` (browsers revalidate; unchanged files return 304). Long-lived
-`immutable` caching made browsers keep an old icon font, so new icons showed
-blank. `index.html`, the bundle, bootstrap script and service worker are never
-cached, and the web build uses `--pwa-strategy=none` so no offline cache serves
-an old version.
+Flutter web assets are not content-hashed (the icon font
+`assets/fonts/MaterialIcons-Regular.otf` keeps its name), so `assets/`,
+`canvaskit/` and `icons/` are served with `no-cache`. `index.html`, the
+bundle, bootstrap script, service worker, `version.json` and `app_build.json`
+are never cached.
+
+**Blank icons / stale versions:** read [WEB_ICONS_AND_CACHING.md](WEB_ICONS_AND_CACHING.md)
+before changing any of this. In short: builds ship the full icon font
+(`--no-tree-shake-icons`; trimming emptied some glyphs), there is no service
+worker (a kill switch removes old ones), fonts are re-fetched once per new
+version, and the app prompts users to update when a newer build is live.
 
 ## Supabase CLI
 

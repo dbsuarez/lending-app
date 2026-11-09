@@ -36,7 +36,8 @@ class _UpdateCheckerState extends State<UpdateChecker>
     if (!UpdateChecker.enabled) return;
     WidgetsBinding.instance.addObserver(this);
     _timer = Timer.periodic(_every, (_) => _check());
-    Future<void>.delayed(const Duration(seconds: 20), _check);
+    // First check 10 seconds after the page loads, then every 5 minutes.
+    Future<void>.delayed(const Duration(seconds: 10), _check);
   }
 
   @override
