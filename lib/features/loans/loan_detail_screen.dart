@@ -322,24 +322,32 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
         ],
       ];
       if (!mobile) {
-        return Row(
+        // Title on its own row so it is never squeezed by the buttons;
+        // actions below, wrapping onto more lines when space runs out.
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            IconButton(
-              tooltip: 'Back to loans',
-              onPressed: () => context.go(_backPath),
-              icon: const Icon(Icons.arrow_back),
+            Row(
+              children: [
+                IconButton(
+                  tooltip: 'Back to loans',
+                  onPressed: () => context.go(_backPath),
+                  icon: const Icon(Icons.arrow_back),
+                ),
+                const SizedBox(width: 8),
+                Expanded(child: title),
+                ...utilityActions,
+                const SizedBox(width: 4),
+                AppStatusBadge(loan.summary.status),
+              ],
             ),
-            const SizedBox(width: 8),
-            Expanded(child: title),
-            ...utilityActions,
-            AppStatusBadge(loan.summary.status),
-            if (loanActions.isNotEmpty) const SizedBox(width: 8),
-            ...loanActions.map(
-              (action) => Padding(
-                padding: const EdgeInsets.only(left: 8),
-                child: action,
+            if (loanActions.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.only(left: 56),
+                child: Wrap(spacing: 8, runSpacing: 8, children: loanActions),
               ),
-            ),
+            ],
           ],
         );
       }
