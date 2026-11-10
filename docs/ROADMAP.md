@@ -86,6 +86,7 @@ Open: the remaining PDFs, legal review, and turning on the weekly backup task.
 - [x] Explicit confirmation and immutable confirmed-terms snapshot
 - [x] Atomic disbursement recording
 - [x] Payments, Activity, and Documents loan-detail tabs
+- [x] Loan Payments tab can record and verify payments with the loan preselected
 - [x] Private PDF/JPG/PNG disbursement evidence attachment (10 MB maximum)
 - [x] Draft cancellation with required reason and audit event
 - [x] Active-loan auditable due-date amendment workflow with consent and audit history
@@ -106,6 +107,7 @@ Open: the remaining PDFs, legal review, and turning on the weekly backup task.
 
 - [x] Payment entry for Cash, GCash, AUB, MariBank, and PalPay
 - [x] Paginated payment list with configurable rows per page
+- [x] Payment rows and cards open their originating loan and return to Payments
 - [x] Pending Verification payment state and live history
 - [x] Rejected payment workflow with required reason and audit event
 - [x] Verified and reversed payment workflows

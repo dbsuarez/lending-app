@@ -2,13 +2,13 @@ param([switch]$Apply)
 # Push supabase/migrations to production over the pooler (the linked CLI
 # returns HTTP 403 for this account). Without -Apply it is a dry run.
 #
-# The database password is read from docs/notes_la (gitignored) at run time,
+# The database password is read from docs/notes_la.txt (gitignored) at run time,
 # never printed, and scrubbed from the CLI output.
 $ErrorActionPreference = 'Continue'
 Set-Location (Split-Path $PSScriptRoot -Parent)
-$line = Get-Content docs\notes_la -ErrorAction Stop |
+$line = Get-Content docs\notes_la.txt -ErrorAction Stop |
   Where-Object { $_ -match '^\s*db pass:\s*(.+)$' } | Select-Object -First 1
-if (-not $line) { throw 'db pass not found in docs/notes_la' }
+if (-not $line) { throw 'db pass not found in docs/notes_la.txt' }
 $pw = ($line -replace '^\s*db pass:\s*', '').Trim()
 $enc = [Uri]::EscapeDataString($pw)
 $url = "postgresql://postgres.bfrifjiqqlziejocleax:$enc@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres"

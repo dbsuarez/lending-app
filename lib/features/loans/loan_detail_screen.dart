@@ -21,6 +21,8 @@ import '../../core/undo/undo_controller.dart';
 import '../documents/loan_print_menu.dart';
 import '../settings/operations_config_provider.dart';
 import '../payments/payment_edit_dialog.dart';
+import '../payments/payments_screen.dart'
+    show PaymentEntryDialog, PaymentEntryValues;
 import '../payments/payments_controller.dart';
 import 'extension_preview_dialog.dart';
 import 'ledger_explanation_dialog.dart';
@@ -143,7 +145,7 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
               _Overview(loan, onChanged: _reload),
               _Schedule(loan.installments),
               _PaymentLedger(loan),
-              _LoanPayments(loan.summary.id, onChanged: _reload),
+              _LoanPayments(loan, onChanged: _reload),
               _LoanActivity(loan.summary.id),
               _LoanDocuments(
                 loan: loan,
@@ -162,6 +164,7 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
       '/borrowers/${widget.borrowerId}',
     'personal' => '/personal-loans',
     'dashboard' => '/dashboard',
+    'payments' => '/payments',
     _ => '/loans',
   };
 
@@ -179,6 +182,7 @@ class _LoanDetailScreenState extends ConsumerState<LoanDetailScreen> {
           'borrower' => 'Borrowers',
           'personal' => 'Personal Loans',
           'dashboard' => 'Dashboard',
+          'payments' => 'Payments',
           _ => 'Loans',
         }),
       ),
@@ -1646,8 +1650,8 @@ class _ScheduleState extends State<_Schedule> {
 }
 
 class _LoanPayments extends ConsumerStatefulWidget {
-  const _LoanPayments(this.loanId, {required this.onChanged});
-  final String loanId;
+  const _LoanPayments(this.loan, {required this.onChanged});
+  final LoanDetail loan;
 
   /// Called after a payment was edited (or the edit undone), so the loan
   /// page can refresh its ledger.
@@ -1662,7 +1666,7 @@ class _LoanPaymentsState extends ConsumerState<_LoanPayments> {
 
   Future<List<PaymentSummary>> _load() => ref
       .read(loansControllerProvider.notifier)
-      .fetchLoanPayments(widget.loanId);
+      .fetchLoanPayments(widget.loan.summary.id);
 
   void _reload() {
     if (!mounted) return;
@@ -1687,6 +1691,85 @@ class _LoanPaymentsState extends ConsumerState<_LoanPayments> {
     );
   }
 
+  Future<void> _record() async {
+    final methods =
+        ref.read(operationsConfigProvider).value?.paymentMethods ??
+        OperationsConfig.defaults.paymentMethods;
+    final values = await showDialog<PaymentEntryValues>(
+      context: context,
+      builder: (_) => PaymentEntryDialog(
+        loans: [widget.loan.summary],
+        methods: methods,
+        loadLoan: (_) async => widget.loan,
+        showLoanSelector: false,
+      ),
+    );
+    if (values == null || !mounted) return;
+    final controller = ref.read(paymentsControllerProvider.notifier);
+    final paymentId = await controller.recordPending(
+      loan: widget.loan.summary,
+      amountCentavos: values.amountCentavos,
+      receivedAt: values.receivedAt,
+      method: values.method,
+      reference: values.reference,
+      lateReason: values.lateReason,
+    );
+    if (!mounted) return;
+    final undo = ref.read(undoControllerProvider.notifier);
+    if (paymentId == null) {
+      undo.record('Payment could not be recorded. Try again.');
+      return;
+    }
+    _reload();
+    undo.offer(
+      values.method == 'Cash'
+          ? 'Cash payment recorded and applied to the balance.'
+          : 'Payment recorded as Pending Verification.',
+      () async {
+        final undone = await controller.undoRecord(paymentId);
+        if (undone) _reload();
+        return undone;
+      },
+    );
+  }
+
+  Future<void> _verify(PaymentSummary payment) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const TitleWithInfo('Verify payment?', 'verify'),
+        content: Text(
+          'This confirms the money arrived and applies ${formatPeso(payment.amountCentavos)} to the oldest unpaid installments, interest first, then principal.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Confirm Received'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final controller = ref.read(paymentsControllerProvider.notifier);
+    final saved = await controller.verify(payment);
+    if (!mounted) return;
+    final undo = ref.read(undoControllerProvider.notifier);
+    if (!saved) {
+      undo.record('Payment verification failed.');
+      return;
+    }
+    _reload();
+    undo.offer('Payment confirmed and applied to the balance.', () async {
+      final undone = await controller.undoVerification(payment.id);
+      if (undone) _reload();
+      return undone;
+    });
+  }
+
   @override
   Widget build(BuildContext context) => FutureBuilder<List<PaymentSummary>>(
     future: payments,
@@ -1700,50 +1783,83 @@ class _LoanPaymentsState extends ConsumerState<_LoanPayments> {
         );
       }
       final items = snapshot.data ?? const <PaymentSummary>[];
-      if (items.isEmpty) {
-        return const Center(child: Text('No payments recorded for this loan.'));
-      }
-      return ListView.separated(
-        padding: const EdgeInsets.all(24),
-        itemCount: items.length,
-        separatorBuilder: (_, _) => const SizedBox(height: 8),
-        itemBuilder: (_, index) {
-          final item = items[index];
-          final editable =
-              item.status == 'pending' || item.status == 'verified';
-          return Card(
-            child: ListTile(
-              leading: const Icon(Icons.payments_outlined),
-              title: Text(formatPeso(item.amountCentavos)),
-              subtitle: Text(
-                '${formatPhilippineDateTime(item.receivedAt)} · ${item.method}${item.reference.isEmpty ? '' : ' · ${item.reference}'}'
-                '${item.unappliedCentavos > 0 ? '\n${formatPeso(item.unappliedCentavos)} not applied (overpaid)' : ''}'
-                '${(item.lateReason?.isNotEmpty ?? false) ? '\nLate: ${item.lateReason}' : ''}',
-              ),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  AppStatusBadge(item.status),
-                  if (item.status == 'verified')
-                    IconButton(
-                      tooltip: 'Payment receipt (PDF)',
-                      onPressed: () => printFromContext(
-                        context,
-                        (c) => printPaymentReceipt(c, item),
-                      ),
-                      icon: const Icon(Icons.receipt_outlined),
-                    ),
-                  if (editable)
-                    IconButton(
-                      tooltip: 'Edit date, method, reference or late reason',
-                      onPressed: () => _edit(item),
-                      icon: const Icon(Icons.edit_outlined),
-                    ),
-                ],
-              ),
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Payment history',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                if (widget.loan.summary.status == 'active')
+                  FilledButton.icon(
+                    onPressed: _record,
+                    icon: const Icon(Icons.add_card_outlined),
+                    label: const Text('Record Payment…'),
+                  ),
+              ],
             ),
-          );
-        },
+          ),
+          Expanded(
+            child: items.isEmpty
+                ? const Center(
+                    child: Text('No payments recorded for this loan.'),
+                  )
+                : ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+                    itemCount: items.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 8),
+                    itemBuilder: (_, index) {
+                      final item = items[index];
+                      final editable =
+                          item.status == 'pending' || item.status == 'verified';
+                      return Card(
+                        child: ListTile(
+                          leading: const Icon(Icons.payments_outlined),
+                          title: Text(formatPeso(item.amountCentavos)),
+                          subtitle: Text(
+                            '${formatPhilippineDateTime(item.receivedAt)} · ${item.method}${item.reference.isEmpty ? '' : ' · ${item.reference}'}'
+                            '${item.unappliedCentavos > 0 ? '\n${formatPeso(item.unappliedCentavos)} not applied (overpaid)' : ''}'
+                            '${(item.lateReason?.isNotEmpty ?? false) ? '\nLate: ${item.lateReason}' : ''}',
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              AppStatusBadge(item.status),
+                              if (item.status == 'pending')
+                                IconButton(
+                                  tooltip: 'Verify payment',
+                                  onPressed: () => _verify(item),
+                                  icon: const Icon(Icons.verified_outlined),
+                                ),
+                              if (item.status == 'verified')
+                                IconButton(
+                                  tooltip: 'Payment receipt (PDF)',
+                                  onPressed: () => printFromContext(
+                                    context,
+                                    (c) => printPaymentReceipt(c, item),
+                                  ),
+                                  icon: const Icon(Icons.receipt_outlined),
+                                ),
+                              if (editable)
+                                IconButton(
+                                  tooltip:
+                                      'Edit date, method, reference or late reason',
+                                  onPressed: () => _edit(item),
+                                  icon: const Icon(Icons.edit_outlined),
+                                ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
       );
     },
   );

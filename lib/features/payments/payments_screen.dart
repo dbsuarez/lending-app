@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../documents/loan_print_menu.dart';
 import '../../core/widgets/table_columns.dart';
 import '../../core/preferences/filter_defaults.dart';
@@ -217,6 +218,8 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
     void toggle(PaymentSummary payment, bool on) => setState(
       () => on ? selected.add(payment.id) : selected.remove(payment.id),
     );
+    void openLoan(PaymentSummary payment) =>
+        context.go('/loans/${payment.loanId}?from=payments');
     final list = LayoutBuilder(
       builder: (context, constraints) => constraints.maxWidth < 760
           ? ResponsiveCardList(
@@ -231,6 +234,7 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
                 onReject: () => _reject(pagePayments[index]),
                 onReverse: () => _reverse(pagePayments[index]),
                 onEdit: () => _edit(pagePayments[index]),
+                onOpen: () => openLoan(pagePayments[index]),
               ),
             )
           : ColumnToggle(
@@ -290,18 +294,32 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
                                   LateReasonMarker(payment.lateReason),
                                 ],
                               ),
+                              onTap: () => openLoan(payment),
                             ),
-                            DataCell(Text(payment.borrowerName)),
-                            DataCell(Text(formatPeso(payment.amountCentavos))),
-                            DataCell(Text(payment.method)),
+                            DataCell(
+                              Text(payment.borrowerName),
+                              onTap: () => openLoan(payment),
+                            ),
+                            DataCell(
+                              Text(formatPeso(payment.amountCentavos)),
+                              onTap: () => openLoan(payment),
+                            ),
+                            DataCell(
+                              Text(payment.method),
+                              onTap: () => openLoan(payment),
+                            ),
                             DataCell(
                               Text(
                                 payment.reference.isEmpty
                                     ? '—'
                                     : payment.reference,
                               ),
+                              onTap: () => openLoan(payment),
                             ),
-                            DataCell(AppStatusBadge(payment.status)),
+                            DataCell(
+                              AppStatusBadge(payment.status),
+                              onTap: () => openLoan(payment),
+                            ),
                             DataCell(_paymentActions(payment)),
                           ]),
                         ),
@@ -356,19 +374,50 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
           spacing: 4,
           runSpacing: 4,
           children: [
-            Text('${start + 1}–${start + pagePayments.length} of ${payments.length}'),
+            Text(
+              '${start + 1}–${start + pagePayments.length} of ${payments.length}',
+            ),
             const SizedBox(width: 12),
             Tooltip(
               message: 'Rows per page',
               child: DropdownButton<int>(
                 value: pageSize,
-                items: const [10, 20, 50].map((size) => DropdownMenuItem(value: size, child: Text('$size rows'))).toList(),
-                onChanged: (size) => setState(() { pageSize = size!; page = 0; selected.clear(); }),
+                items: const [10, 20, 50]
+                    .map(
+                      (size) => DropdownMenuItem(
+                        value: size,
+                        child: Text('$size rows'),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (size) => setState(() {
+                  pageSize = size!;
+                  page = 0;
+                  selected.clear();
+                }),
               ),
             ),
-            IconButton(tooltip: 'Previous page', onPressed: page == 0 ? null : () => setState(() { page--; selected.clear(); }), icon: const Icon(Icons.chevron_left)),
+            IconButton(
+              tooltip: 'Previous page',
+              onPressed: page == 0
+                  ? null
+                  : () => setState(() {
+                      page--;
+                      selected.clear();
+                    }),
+              icon: const Icon(Icons.chevron_left),
+            ),
             Text('${page + 1} / $pageCount'),
-            IconButton(tooltip: 'Next page', onPressed: page + 1 >= pageCount ? null : () => setState(() { page++; selected.clear(); }), icon: const Icon(Icons.chevron_right)),
+            IconButton(
+              tooltip: 'Next page',
+              onPressed: page + 1 >= pageCount
+                  ? null
+                  : () => setState(() {
+                      page++;
+                      selected.clear();
+                    }),
+              icon: const Icon(Icons.chevron_right),
+            ),
           ],
         ),
       ],
@@ -437,9 +486,9 @@ class _PaymentsScreenState extends ConsumerState<PaymentsScreen> {
     List<LoanSummary> activeLoans,
     List<String> methods,
   ) async {
-    final values = await showDialog<_PaymentValues>(
+    final values = await showDialog<PaymentEntryValues>(
       context: context,
-      builder: (_) => _PaymentDialog(
+      builder: (_) => PaymentEntryDialog(
         loans: activeLoans,
         methods: methods,
         loadLoan: ref.read(loansControllerProvider.notifier).fetchDetail,
@@ -620,11 +669,12 @@ class _PaymentCard extends StatelessWidget {
     required this.onReject,
     required this.onReverse,
     required this.onEdit,
+    required this.onOpen,
     this.selected,
     this.onSelected,
   });
   final PaymentSummary payment;
-  final VoidCallback onVerify, onReject, onReverse, onEdit;
+  final VoidCallback onVerify, onReject, onReverse, onEdit, onOpen;
 
   /// Null when the payment cannot be selected (not pending).
   final bool? selected;
@@ -632,82 +682,92 @@ class _PaymentCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Card(
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              if (selected != null)
-                Checkbox(
-                  value: selected,
-                  onChanged: (on) => onSelected?.call(on ?? false),
-                ),
-              Expanded(
-                child: Text(
-                  payment.borrowerName,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-              ),
-              AppStatusBadge(payment.status),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(formatPhilippineDateTime(payment.receivedAt)),
-          Text(
-            '${payment.method} · ${payment.reference.isEmpty ? 'No reference' : payment.reference}',
-          ),
-          if (payment.lateReason?.isNotEmpty ?? false)
-            Text(
-              'Late: ${payment.lateReason}',
-              style: TextStyle(color: Theme.of(context).colorScheme.tertiary),
-            ),
-          const SizedBox(height: 8),
-          Text(
-            formatPeso(payment.amountCentavos),
-            textAlign: TextAlign.right,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-          ),
-          if (payment.unappliedCentavos > 0)
-            Text(
-              '${formatPeso(payment.unappliedCentavos)} remains as unapplied credit',
-              textAlign: TextAlign.right,
-            ),
-          if (payment.status == 'pending') ...[
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerRight,
-              child: Wrap(
-                children: [
-                  TextButton(onPressed: onEdit, child: const Text('Edit…')),
-                  TextButton(onPressed: onVerify, child: const Text('Verify…')),
-                  TextButton(onPressed: onReject, child: const Text('Reject…')),
-                ],
-              ),
-            ),
-          ],
-          if (payment.status == 'verified')
-            Align(
-              alignment: Alignment.centerRight,
-              child: Wrap(
-                children: [
-                  TextButton(onPressed: onEdit, child: const Text('Edit…')),
-                  TextButton(
-                    onPressed: onReverse,
-                    child: const Text('Reverse Payment'),
+    clipBehavior: Clip.antiAlias,
+    child: InkWell(
+      onTap: onOpen,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                if (selected != null)
+                  Checkbox(
+                    value: selected,
+                    onChanged: (on) => onSelected?.call(on ?? false),
                   ),
-                ],
-              ),
+                Expanded(
+                  child: Text(
+                    payment.borrowerName,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                AppStatusBadge(payment.status),
+              ],
             ),
-        ],
+            const SizedBox(height: 8),
+            Text(formatPhilippineDateTime(payment.receivedAt)),
+            Text(
+              '${payment.method} · ${payment.reference.isEmpty ? 'No reference' : payment.reference}',
+            ),
+            if (payment.lateReason?.isNotEmpty ?? false)
+              Text(
+                'Late: ${payment.lateReason}',
+                style: TextStyle(color: Theme.of(context).colorScheme.tertiary),
+              ),
+            const SizedBox(height: 8),
+            Text(
+              formatPeso(payment.amountCentavos),
+              textAlign: TextAlign.right,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+            ),
+            if (payment.unappliedCentavos > 0)
+              Text(
+                '${formatPeso(payment.unappliedCentavos)} remains as unapplied credit',
+                textAlign: TextAlign.right,
+              ),
+            if (payment.status == 'pending') ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Wrap(
+                  children: [
+                    TextButton(onPressed: onEdit, child: const Text('Edit…')),
+                    TextButton(
+                      onPressed: onVerify,
+                      child: const Text('Verify…'),
+                    ),
+                    TextButton(
+                      onPressed: onReject,
+                      child: const Text('Reject…'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            if (payment.status == 'verified')
+              Align(
+                alignment: Alignment.centerRight,
+                child: Wrap(
+                  children: [
+                    TextButton(onPressed: onEdit, child: const Text('Edit…')),
+                    TextButton(
+                      onPressed: onReverse,
+                      child: const Text('Reverse Payment'),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
       ),
     ),
   );
 }
 
-class _PaymentValues {
-  const _PaymentValues({
+class PaymentEntryValues {
+  const PaymentEntryValues({
     required this.loanId,
     required this.amountCentavos,
     required this.receivedAt,
@@ -721,23 +781,26 @@ class _PaymentValues {
   final String? lateReason;
 }
 
-class _PaymentDialog extends StatefulWidget {
-  const _PaymentDialog({
+class PaymentEntryDialog extends StatefulWidget {
+  const PaymentEntryDialog({
+    super.key,
     required this.loans,
     required this.methods,
     required this.loadLoan,
+    this.showLoanSelector = true,
   });
   final List<LoanSummary> loans;
   final List<String> methods;
 
   /// Loads the loan's schedule, to tell whether the payment is late.
   final Future<LoanDetail> Function(String loanId) loadLoan;
+  final bool showLoanSelector;
 
   @override
-  State<_PaymentDialog> createState() => _PaymentDialogState();
+  State<PaymentEntryDialog> createState() => _PaymentDialogState();
 }
 
-class _PaymentDialogState extends State<_PaymentDialog> {
+class _PaymentDialogState extends State<PaymentEntryDialog> {
   final key = GlobalKey<FormState>();
   final amount = TextEditingController();
   final reference = TextEditingController();
@@ -786,21 +849,27 @@ class _PaymentDialogState extends State<_PaymentDialog> {
         child: SingleChildScrollView(
           child: Column(
             children: [
-              DropdownButtonFormField<String>(
-                initialValue: loanId,
-                decoration: const InputDecoration(labelText: 'Active loan'),
-                items: [
-                  for (final loan in widget.loans)
-                    DropdownMenuItem(
-                      value: loan.id,
-                      child: Text(loan.borrowerName),
-                    ),
-                ],
-                onChanged: (value) {
-                  setState(() => loanId = value!);
-                  _loadDetail(value!);
-                },
-              ),
+              if (widget.showLoanSelector)
+                DropdownButtonFormField<String>(
+                  initialValue: loanId,
+                  decoration: const InputDecoration(labelText: 'Active loan'),
+                  items: [
+                    for (final loan in widget.loans)
+                      DropdownMenuItem(
+                        value: loan.id,
+                        child: Text(loan.borrowerName),
+                      ),
+                  ],
+                  onChanged: (value) {
+                    setState(() => loanId = value!);
+                    _loadDetail(value!);
+                  },
+                )
+              else
+                InputDecorator(
+                  decoration: const InputDecoration(labelText: 'Loan'),
+                  child: Text(widget.loans.first.borrowerName),
+                ),
               const SizedBox(height: 12),
               TextFormField(
                 controller: amount,
@@ -870,7 +939,7 @@ class _PaymentDialogState extends State<_PaymentDialog> {
           if (!key.currentState!.validate()) return;
           Navigator.pop(
             context,
-            _PaymentValues(
+            PaymentEntryValues(
               loanId: loanId,
               amountCentavos: (double.parse(amount.text) * 100).round(),
               receivedAt: receivedAt,
